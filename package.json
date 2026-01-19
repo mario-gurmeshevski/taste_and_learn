@@ -10,10 +10,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.90.1",
     "@tailwindcss/vite": "^4.1.18",
+    "dotenv": "^17.2.3",
+    "framer-motion": "^12.26.2",
+    "plyr-react": "^6.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-icons": "^5.5.0",
+    "react-router-dom": "^7.12.0",
     "tailwindcss": "^4.1.18"
   },
   "devDependencies": {

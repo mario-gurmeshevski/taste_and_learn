@@ -1,3 +1,6 @@
+.env
+my-user.sql
+
 # Logs
 logs
 *.log
