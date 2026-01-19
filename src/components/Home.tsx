@@ -49,7 +49,7 @@ const Home: React.FC = () => {
 
     // Listen for auth changes
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (_event, session) => {
         if (session?.user) {
           const { data: userData } = await supabase
             .from("users")
