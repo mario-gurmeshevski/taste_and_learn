@@ -13,6 +13,7 @@ An interactive video quiz website built with Vite, React, TypeScript, Tailwind C
 ## Setup
 
 1. Install dependencies:
+
    ```bash
    npm install
    ```
