@@ -15,6 +15,9 @@ const Login: React.FC = () => {
     setError("");
 
     try {
+      // Sign out anonymous user first
+      await supabase.auth.signOut();
+
       // Sign in with Supabase Auth
       const { data: authData, error: authError } =
         await supabase.auth.signInWithPassword({
@@ -36,7 +39,19 @@ const Login: React.FC = () => {
             "An error occurred during login. Please try again.",
           );
         }
+
+        // Re-establish anonymous session for realtime
+        const { data: anonData } =
+          await supabase.auth.signInAnonymously();
+        if (anonData.session?.access_token) {
+          supabase.realtime.setAuth(anonData.session.access_token);
+        }
         return;
+      }
+
+      // Set realtime auth
+      if (authData.session?.access_token) {
+        supabase.realtime.setAuth(authData.session.access_token);
       }
 
       // Fetch user profile from users table to check role

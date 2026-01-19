@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
+import { motion } from "framer-motion";
 import supabase from "../lib/supabase";
 import videoFile from "../assets/video.mp4";
 import { Plyr } from "plyr-react";
@@ -14,6 +15,7 @@ interface BroadcastState {
   id: number;
   current_position: number;
   is_playing: boolean;
+  updated_at: string;
 }
 
 interface PlyrRef {
@@ -28,10 +30,8 @@ const AdminPanel: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   const plyrRef = useRef<PlyrRef>(null);
-  const lastUpdateTime = useRef<number>(Date.now());
   const isUpdating = useRef(false);
   const broadcastStateRef = useRef<BroadcastState | null>(null);
-  const lastProgressUpdate = useRef<number>(0);
 
   const videoSrc = useMemo(
     () => ({
@@ -102,26 +102,29 @@ const AdminPanel: React.FC = () => {
       )
         return;
 
-      const now = Date.now();
-      if (now - lastUpdateTime.current < 500) return;
-
       isUpdating.current = true;
-      lastUpdateTime.current = now;
 
       try {
+        const updateData = {
+          ...updates,
+          updated_by: currentUser.id,
+          updated_at: new Date().toISOString(),
+        };
+
+        console.log("Updating broadcast state:", updateData);
+
         const { error } = await supabase
           .from("public_broadcast_state")
-          .update({
-            ...updates,
-            updated_by: currentUser.id,
-            updated_at: new Date().toISOString(),
-          })
+          .update(updateData)
           .eq("id", broadcastStateRef.current.id);
 
         if (!error) {
+          console.log("✅ Update successful");
           setBroadcastState((prev) =>
             prev ? { ...prev, ...updates } : null,
           );
+        } else {
+          console.error("❌ Update failed:", error);
         }
       } finally {
         isUpdating.current = false;
@@ -130,36 +133,24 @@ const AdminPanel: React.FC = () => {
     [currentUser],
   );
 
-  const handleProgress = useCallback(() => {
-    const now = Date.now();
-    if (
-      now - lastProgressUpdate.current > 500 &&
-      broadcastStateRef.current?.is_playing &&
-      !isUpdating.current &&
-      isPlayerReady &&
-      plyrRef.current?.plyr
-    ) {
-      const currentTime = plyrRef.current.plyr.currentTime;
-      const lastPosition = broadcastStateRef.current.current_position;
+  // Optional: Periodic sync every 30 seconds during playback to prevent drift
+  useEffect(() => {
+    if (!isPlayerReady || !broadcastState?.is_playing) return;
 
-      if (Math.abs(currentTime - lastPosition) > 0.3) {
-        lastProgressUpdate.current = now;
+    const syncInterval = setInterval(() => {
+      if (plyrRef.current?.plyr) {
+        const currentTime = plyrRef.current.plyr.currentTime;
+        console.log("Heartbeat sync:", currentTime);
         updateBroadcastState({ current_position: currentTime });
       }
-    }
-  }, [isPlayerReady, updateBroadcastState]);
+    }, 30000);
 
-  useEffect(() => {
-    if (plyrRef.current?.plyr && isPlayerReady) {
-      plyrRef.current.plyr.on("timeupdate", handleProgress);
-
-      return () => {
-        if (plyrRef.current?.plyr) {
-          plyrRef.current.plyr.off("timeupdate", handleProgress);
-        }
-      };
-    }
-  }, [isPlayerReady, handleProgress]);
+    return () => clearInterval(syncInterval);
+  }, [
+    isPlayerReady,
+    broadcastState?.is_playing,
+    updateBroadcastState,
+  ]);
 
   useEffect(() => {
     let mounted = true;
@@ -319,86 +310,198 @@ const AdminPanel: React.FC = () => {
   return (
     <div className="pt-16 bg-black min-h-screen">
       <div className="max-w-7xl mx-auto p-6">
-        <div className="bg-neutral-900 border border-neutral-700 p-4 mb-4 rounded-lg">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="bg-neutral-900 border border-neutral-700 p-4 mb-4 rounded-lg"
+        >
           <h2 className="text-white text-xl font-bold mb-4">
             Admin Broadcast Controls
           </h2>
 
           <div className="flex flex-wrap gap-2 mb-4">
-            <button
+            <motion.button
               onClick={handlePlay}
               disabled={!isPlayerReady}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.1 }}
+              whileHover={
+                isPlayerReady
+                  ? {
+                      scale: 1.05,
+                      y: -2,
+                      transition: { duration: 0.2 },
+                    }
+                  : {}
+              }
+              whileTap={
+                isPlayerReady
+                  ? { scale: 0.95, transition: { duration: 0.1 } }
+                  : {}
+              }
               className={`${
                 isPlayerReady
-                  ? "bg-green-600 hover:bg-green-700"
-                  : "bg-gray-500 cursor-not-allowed opacity-50"
-              } text-white px-4 py-2 rounded text-sm font-medium transition-colors`}
+                  ? "bg-green-500/30 border-green-400/30 shadow-lg shadow-green-500/20"
+                  : "bg-gray-500/20 border-gray-500/20 cursor-not-allowed opacity-50"
+              } backdrop-blur-md text-white px-4 py-2 rounded-lg text-sm font-medium border`}
             >
               ▶ Start/Play
-            </button>
+            </motion.button>
 
-            <button
+            <motion.button
               onClick={handlePause}
               disabled={!isPlayerReady}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.15 }}
+              whileHover={
+                isPlayerReady
+                  ? {
+                      scale: 1.05,
+                      y: -2,
+                      transition: { duration: 0.2 },
+                    }
+                  : {}
+              }
+              whileTap={
+                isPlayerReady
+                  ? { scale: 0.95, transition: { duration: 0.1 } }
+                  : {}
+              }
               className={`${
                 isPlayerReady
-                  ? "bg-yellow-600 hover:bg-yellow-700"
-                  : "bg-gray-500 cursor-not-allowed opacity-50"
-              } text-white px-4 py-2 rounded text-sm font-medium transition-colors`}
+                  ? "bg-yellow-500/30 border-yellow-400/30 shadow-lg shadow-yellow-500/20"
+                  : "bg-gray-500/20 border-gray-500/20 cursor-not-allowed opacity-50"
+              } backdrop-blur-md text-white px-4 py-2 rounded-lg text-sm font-medium border`}
             >
               ⏸ Pause
-            </button>
+            </motion.button>
 
-            <button
+            <motion.button
               onClick={handleStop}
               disabled={!isPlayerReady}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.2 }}
+              whileHover={
+                isPlayerReady
+                  ? {
+                      scale: 1.05,
+                      y: -2,
+                      transition: { duration: 0.2 },
+                    }
+                  : {}
+              }
+              whileTap={
+                isPlayerReady
+                  ? { scale: 0.95, transition: { duration: 0.1 } }
+                  : {}
+              }
               className={`${
                 isPlayerReady
-                  ? "bg-red-600 hover:bg-red-700"
-                  : "bg-gray-500 cursor-not-allowed opacity-50"
-              } text-white px-4 py-2 rounded text-sm font-medium transition-colors`}
+                  ? "bg-red-500/30 border-red-400/30 shadow-lg shadow-red-500/20"
+                  : "bg-gray-500/20 border-gray-500/20 cursor-not-allowed opacity-50"
+              } backdrop-blur-md text-white px-4 py-2 rounded-lg text-sm font-medium border`}
             >
               ⏹ Stop
-            </button>
+            </motion.button>
 
-            <button
+            <motion.button
               onClick={handleRestart}
               disabled={!isPlayerReady}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.25 }}
+              whileHover={
+                isPlayerReady
+                  ? {
+                      scale: 1.05,
+                      y: -2,
+                      transition: { duration: 0.2 },
+                    }
+                  : {}
+              }
+              whileTap={
+                isPlayerReady
+                  ? { scale: 0.95, transition: { duration: 0.1 } }
+                  : {}
+              }
               className={`${
                 isPlayerReady
-                  ? "bg-blue-600 hover:bg-blue-700"
-                  : "bg-gray-500 cursor-not-allowed opacity-50"
-              } text-white px-4 py-2 rounded text-sm font-medium transition-colors`}
+                  ? "bg-blue-500/30 border-blue-400/30 shadow-lg shadow-blue-500/20"
+                  : "bg-gray-500/20 border-gray-500/20 cursor-not-allowed opacity-50"
+              } backdrop-blur-md text-white px-4 py-2 rounded-lg text-sm font-medium border`}
             >
               ⏮ Restart
-            </button>
+            </motion.button>
 
-            <button
+            <motion.button
               onClick={handleSkipBackward}
               disabled={!isPlayerReady}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.3 }}
+              whileHover={
+                isPlayerReady
+                  ? {
+                      scale: 1.05,
+                      y: -2,
+                      transition: { duration: 0.2 },
+                    }
+                  : {}
+              }
+              whileTap={
+                isPlayerReady
+                  ? { scale: 0.95, transition: { duration: 0.1 } }
+                  : {}
+              }
               className={`${
                 isPlayerReady
-                  ? "bg-neutral-600 hover:bg-neutral-700"
-                  : "bg-gray-500 cursor-not-allowed opacity-50"
-              } text-white px-4 py-2 rounded text-sm font-medium transition-colors`}
+                  ? "bg-neutral-400/20 border-neutral-400/20 shadow-lg shadow-neutral-500/10"
+                  : "bg-gray-500/20 border-gray-500/20 cursor-not-allowed opacity-50"
+              } backdrop-blur-md text-white px-4 py-2 rounded-lg text-sm font-medium border`}
             >
               ⏪ -10s
-            </button>
+            </motion.button>
 
-            <button
+            <motion.button
               onClick={handleSkipForward}
               disabled={!isPlayerReady}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.35 }}
+              whileHover={
+                isPlayerReady
+                  ? {
+                      scale: 1.05,
+                      y: -2,
+                      transition: { duration: 0.2 },
+                    }
+                  : {}
+              }
+              whileTap={
+                isPlayerReady
+                  ? { scale: 0.95, transition: { duration: 0.1 } }
+                  : {}
+              }
               className={`${
                 isPlayerReady
-                  ? "bg-neutral-600 hover:bg-neutral-700"
-                  : "bg-gray-500 cursor-not-allowed opacity-50"
-              } text-white px-4 py-2 rounded text-sm font-medium transition-colors`}
+                  ? "bg-neutral-400/20 border-neutral-400/20 shadow-lg shadow-neutral-500/10"
+                  : "bg-gray-500/20 border-gray-500/20 cursor-not-allowed opacity-50"
+              } backdrop-blur-md text-white px-4 py-2 rounded-lg text-sm font-medium border`}
             >
               ⏩ +10s
-            </button>
+            </motion.button>
           </div>
 
-          <div className="text-white text-sm">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4 }}
+            className="text-white text-sm"
+          >
             <p>
               Status:{" "}
               <span className="font-bold">
@@ -413,8 +516,8 @@ const AdminPanel: React.FC = () => {
                 {(broadcastState?.current_position ?? 0).toFixed(2)}s
               </span>
             </p>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
 
         <div className="w-full h-[calc(100vh-20rem)]">
           {!isPlayerReady && (

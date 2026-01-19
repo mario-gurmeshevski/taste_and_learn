@@ -7,6 +7,7 @@ const Navbar: React.FC = () => {
   const location = useLocation();
   const [hoveredPath, setHoveredPath] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isAnonymous, setIsAnonymous] = useState(false);
 
   useEffect(() => {
     // Check current session on mount and route changes
@@ -16,17 +17,25 @@ const Navbar: React.FC = () => {
       } = await supabase.auth.getSession();
 
       if (session?.user) {
-        const { data: userData } = await supabase
-          .from("users")
-          .select("*")
-          .eq("id", session.user.id)
-          .single();
+        const isAnonUser = session.user.is_anonymous || false;
+        setIsAnonymous(isAnonUser);
 
-        if (userData) {
-          setCurrentUser(userData);
+        if (!isAnonUser) {
+          const { data: userData } = await supabase
+            .from("users")
+            .select("*")
+            .eq("id", session.user.id)
+            .single();
+
+          if (userData) {
+            setCurrentUser(userData);
+          }
+        } else {
+          setCurrentUser(null);
         }
       } else {
         setCurrentUser(null);
+        setIsAnonymous(false);
       }
     };
 
@@ -37,17 +46,25 @@ const Navbar: React.FC = () => {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
-        const { data: userData } = await supabase
-          .from("users")
-          .select("*")
-          .eq("id", session.user.id)
-          .single();
+        const isAnonUser = session.user.is_anonymous || false;
+        setIsAnonymous(isAnonUser);
 
-        if (userData) {
-          setCurrentUser(userData);
+        if (!isAnonUser) {
+          const { data: userData } = await supabase
+            .from("users")
+            .select("*")
+            .eq("id", session.user.id)
+            .single();
+
+          if (userData) {
+            setCurrentUser(userData);
+          }
+        } else {
+          setCurrentUser(null);
         }
       } else {
         setCurrentUser(null);
+        setIsAnonymous(false);
       }
     });
 
@@ -60,8 +77,10 @@ const Navbar: React.FC = () => {
 
   const navItems = [
     { path: "/", label: "Home" },
-    { path: "/quiz", label: "Quiz" },
-    { path: "/leaderboard", label: "Leaderboard" },
+    { path: "/quiz", label: "Quiz" }, // ✅ Always visible
+    ...(!isAnonymous && currentUser
+      ? [{ path: "/leaderboard", label: "Leaderboard" }]
+      : []),
     ...(currentUser?.role === "admin"
       ? [{ path: "/admin", label: "Admin Panel" }]
       : []),
@@ -70,6 +89,13 @@ const Navbar: React.FC = () => {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setCurrentUser(null);
+    setIsAnonymous(false);
+
+    // Sign in anonymously again for continued realtime access
+    const { data } = await supabase.auth.signInAnonymously();
+    if (data.session?.access_token) {
+      supabase.realtime.setAuth(data.session.access_token);
+    }
   };
 
   return (
@@ -126,7 +152,7 @@ const Navbar: React.FC = () => {
           </div>
 
           <div className="flex items-center">
-            {currentUser ? (
+            {currentUser && !isAnonymous ? (
               <div className="flex items-center gap-4">
                 <span className="text-sm text-neutral-700 hidden sm:block">
                   Welcome, {currentUser.name}

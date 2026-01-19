@@ -21,6 +21,13 @@ const Home: React.FC = () => {
     useState<BroadcastState | null>(null);
   const [isLocallyPaused, setIsLocallyPaused] = useState(false);
   const [isPlayerReady, setIsPlayerReady] = useState(false);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [lastKnownState, setLastKnownState] = useState<{
+    position: number;
+    timestamp: number;
+    isPlaying: boolean;
+  } | null>(null);
+
   const plyrRef = useRef<PlyrRef>(null);
   const isUpdatingFromBroadcast = useRef(false);
   const broadcastStateRef = useRef<BroadcastState | null>(null);
@@ -76,6 +83,18 @@ const Home: React.FC = () => {
     broadcastStateRef.current = broadcastState;
   }, [broadcastState]);
 
+  // Update lastKnownState when broadcast state changes
+  useEffect(() => {
+    if (broadcastState) {
+      console.log("Broadcast state updated:", broadcastState);
+      setLastKnownState({
+        position: broadcastState.current_position,
+        timestamp: new Date(broadcastState.updated_at).getTime(),
+        isPlaying: broadcastState.is_playing,
+      });
+    }
+  }, [broadcastState]);
+
   useEffect(() => {
     let mounted = true;
     let timeoutId: ReturnType<typeof setTimeout>;
@@ -98,46 +117,57 @@ const Home: React.FC = () => {
     };
   }, []);
 
-  // Sync interval
+  // Client-side interpolation sync
   useEffect(() => {
-    if (!isPlayerReady || !plyrRef.current?.plyr || isLocallyPaused)
+    if (
+      !isPlayerReady ||
+      !plyrRef.current?.plyr ||
+      isLocallyPaused ||
+      !lastKnownState
+    )
       return;
 
     const syncInterval = setInterval(() => {
-      if (
-        !broadcastStateRef.current ||
-        isUpdatingFromBroadcast.current
-      )
-        return;
+      if (isUpdatingFromBroadcast.current) return;
 
       const player = plyrRef.current?.plyr;
       if (!player) return;
 
-      const currentTime = player.currentTime || 0;
-      const adminTime = broadcastStateRef.current.current_position;
-      const timeDiff = Math.abs(adminTime - currentTime);
+      // Calculate expected position based on time elapsed
+      const now = Date.now();
+      const timeElapsed = (now - lastKnownState.timestamp) / 1000;
+      const expectedPosition = lastKnownState.isPlaying
+        ? lastKnownState.position + timeElapsed
+        : lastKnownState.position;
 
-      if (timeDiff > 0.5 && !player.seeking) {
+      const currentTime = player.currentTime || 0;
+      const timeDiff = Math.abs(expectedPosition - currentTime);
+
+      // Only sync if drift > 1 second
+      if (timeDiff > 1.0 && !player.seeking) {
+        console.log(
+          `Syncing: drift=${timeDiff.toFixed(2)}s, expected=${expectedPosition.toFixed(2)}s`,
+        );
         isUpdatingFromBroadcast.current = true;
-        player.currentTime = adminTime;
+        player.currentTime = expectedPosition;
 
         setTimeout(() => {
           isUpdatingFromBroadcast.current = false;
         }, 200);
       }
 
-      if (broadcastStateRef.current.is_playing && player.paused) {
+      // Sync play/pause state
+      if (lastKnownState.isPlaying && player.paused) {
+        console.log("Starting playback (was paused)");
         player.play().catch(console.error);
-      } else if (
-        !broadcastStateRef.current.is_playing &&
-        !player.paused
-      ) {
+      } else if (!lastKnownState.isPlaying && !player.paused) {
+        console.log("Pausing playback (was playing)");
         player.pause();
       }
-    }, 500);
+    }, 1000);
 
     return () => clearInterval(syncInterval);
-  }, [isPlayerReady, isLocallyPaused]);
+  }, [isPlayerReady, isLocallyPaused, lastKnownState]);
 
   // Initial fetch and realtime subscription
   useEffect(() => {
@@ -146,12 +176,14 @@ const Home: React.FC = () => {
     let channel: any;
 
     const setupSubscription = async () => {
+      // Fetch initial state first
       const { data } = await supabase
         .from("public_broadcast_state")
         .select("*")
         .single();
 
       if (data && plyrRef.current?.plyr) {
+        console.log("Initial broadcast state loaded:", data);
         setBroadcastState(data);
         plyrRef.current.plyr.currentTime = data.current_position;
 
@@ -162,6 +194,7 @@ const Home: React.FC = () => {
         }
       }
 
+      // Set up realtime subscription
       channel = supabase
         .channel("broadcast-changes")
         .on(
@@ -172,10 +205,19 @@ const Home: React.FC = () => {
             table: "public_broadcast_state",
           },
           (payload) => {
+            console.log("Realtime update received:", payload.new);
             setBroadcastState(payload.new as BroadcastState);
           },
         )
-        .subscribe();
+        .subscribe((status) => {
+          console.log("Subscription status:", status);
+          if (status === "SUBSCRIBED") {
+            setIsSubscribed(true);
+            console.log(
+              "Successfully subscribed to broadcast changes",
+            );
+          }
+        });
     };
 
     setupSubscription();
@@ -183,9 +225,31 @@ const Home: React.FC = () => {
     return () => {
       if (channel) {
         supabase.removeChannel(channel);
+        setIsSubscribed(false);
       }
     };
   }, [isPlayerReady]);
+
+  // Fallback polling if realtime isn't working
+  useEffect(() => {
+    if (!isPlayerReady || isSubscribed) return;
+
+    console.log("Realtime not subscribed, using fallback polling...");
+
+    const pollInterval = setInterval(async () => {
+      const { data } = await supabase
+        .from("public_broadcast_state")
+        .select("*")
+        .single();
+
+      if (data) {
+        console.log("Polling update:", data);
+        setBroadcastState(data);
+      }
+    }, 2000);
+
+    return () => clearInterval(pollInterval);
+  }, [isPlayerReady, isSubscribed]);
 
   const handleLocalPause = () => {
     if (plyrRef.current?.plyr && isPlayerReady) {
@@ -197,15 +261,24 @@ const Home: React.FC = () => {
   const handleLocalPlay = () => {
     if (
       isLocallyPaused &&
-      broadcastState &&
+      lastKnownState &&
       plyrRef.current?.plyr &&
       isPlayerReady
     ) {
-      plyrRef.current.plyr.currentTime =
-        broadcastState.current_position;
+      // Calculate current expected position
+      const now = Date.now();
+      const timeElapsed = (now - lastKnownState.timestamp) / 1000;
+      const expectedPosition = lastKnownState.isPlaying
+        ? lastKnownState.position + timeElapsed
+        : lastKnownState.position;
+
+      console.log(
+        `Resuming to live position: ${expectedPosition.toFixed(2)}s`,
+      );
+      plyrRef.current.plyr.currentTime = expectedPosition;
       setIsLocallyPaused(false);
 
-      if (broadcastState.is_playing) {
+      if (lastKnownState.isPlaying) {
         setTimeout(() => {
           plyrRef.current?.plyr.play().catch(console.error);
         }, 100);
@@ -261,7 +334,8 @@ const Home: React.FC = () => {
           </p>
           <p className="text-xs mt-1">
             You can pause locally, but you cannot seek or control
-            playback.
+            playback.{" "}
+            {isSubscribed ? "🟢 Connected" : "🟡 Connecting..."}
           </p>
         </div>
 
