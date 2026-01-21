@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
+import { FaSpinner } from "react-icons/fa";
 import supabase from "../lib/supabase";
 
 interface ProtectedRouteProps {
@@ -11,9 +12,10 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   children,
   requireAdmin = false,
 }) => {
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
-  const [isAnonymous, setIsAnonymous] = useState(false);
+  const [hasSession, setHasSession] = useState(false);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -22,23 +24,32 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
       } = await supabase.auth.getSession();
 
       if (!session) {
+        setHasSession(false);
         setLoading(false);
         return;
       }
 
-      // Check if user is anonymous
+      setHasSession(true);
+
       const isAnonUser = session.user.is_anonymous || false;
-      setIsAnonymous(isAnonUser);
 
       if (!isAnonUser) {
-        // Get full user profile for logged-in users
-        const { data: userData } = await supabase
+        const { data: userData, error } = await supabase
           .from("users")
           .select("*")
           .eq("id", session.user.id)
-          .single();
+          .maybeSingle();
 
-        setUser(userData);
+        if (error) {
+          console.error("Error fetching user:", error);
+          setUser({ role: "user" });
+        } else if (userData) {
+          setUser(userData);
+        } else {
+          setUser({ role: "user" });
+        }
+      } else {
+        setUser({ role: "user" });
       }
 
       setLoading(false);
@@ -50,23 +61,28 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session) {
+        setHasSession(true);
         const isAnonUser = session.user.is_anonymous || false;
-        setIsAnonymous(isAnonUser);
 
         if (!isAnonUser) {
-          const { data: userData } = await supabase
+          const { data: userData, error } = await supabase
             .from("users")
             .select("*")
             .eq("id", session.user.id)
-            .single();
+            .maybeSingle();
 
-          setUser(userData);
-        } else {
-          setUser(null);
+          if (error) {
+            console.error("Error fetching user:", error);
+            setUser({ role: "user" });
+          } else if (userData) {
+            setUser(userData);
+          } else {
+            setUser({ role: "user" });
+          }
         }
       } else {
         setUser(null);
-        setIsAnonymous(false);
+        setHasSession(false);
       }
       setLoading(false);
     });
@@ -80,15 +96,17 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return (
       <div className="min-h-screen flex items-center justify-center bg-neutral-50">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-neutral-900 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <FaSpinner className="w-12 h-12 animate-spin mx-auto text-neutral-900" />
           <p className="mt-4 text-neutral-600">Loading...</p>
         </div>
       </div>
     );
   }
 
-  // Redirect anonymous users to login
-  if (isAnonymous || !user) {
+  // Redirect to login if no session exists
+  if (!hasSession || !user) {
+    // Store the attempted path for redirect after login
+    localStorage.setItem("redirectPath", location.pathname);
     return <Navigate to="/login" replace />;
   }
 

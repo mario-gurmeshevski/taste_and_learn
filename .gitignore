@@ -1,5 +1,8 @@
 .env
 my-user.sql
+text.txt
+.claude
+Claude.md
 
 # Logs
 logs

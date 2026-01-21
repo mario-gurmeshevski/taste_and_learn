@@ -13,7 +13,6 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.90.1",
     "@tailwindcss/vite": "^4.1.18",
-    "dotenv": "^17.2.3",
     "framer-motion": "^12.26.2",
     "plyr-react": "^6.0.0",
     "react": "^19.2.0",

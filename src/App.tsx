@@ -3,8 +3,10 @@ import {
   BrowserRouter as Router,
   Routes,
   Route,
+  useLocation,
 } from "react-router-dom";
 import { useEffect } from "react";
+import { AnimatePresence } from "framer-motion";
 import Home from "./components/Home";
 import Quiz from "./components/Quiz";
 import LeaderboardPage from "./components/LeaderboardPage";
@@ -12,6 +14,7 @@ import Navbar from "./components/Navbar";
 import Login from "./components/Login";
 import AdminPanel from "./components/AdminPanel";
 import ProtectedRoute from "./components/ProtectedRoute";
+import NotFound from "./components/NotFound";
 import supabase from "./lib/supabase";
 
 function App() {
@@ -22,29 +25,9 @@ function App() {
         data: { session },
       } = await supabase.auth.getSession();
 
-      if (!session) {
-        // No session exists - sign in anonymously for realtime
-        console.log("No session found, signing in anonymously...");
-        const { data, error } =
-          await supabase.auth.signInAnonymously();
-
-        if (error) {
-          console.error("Anonymous sign-in error:", error);
-          return;
-        }
-
-        console.log("✅ Signed in anonymously");
-
-        // Set auth token for realtime
-        if (data.session?.access_token) {
-          supabase.realtime.setAuth(data.session.access_token);
-        }
-      } else {
-        // Existing session - set auth for realtime
-        console.log("Existing session found");
-        if (session.access_token) {
-          supabase.realtime.setAuth(session.access_token);
-        }
+      // Set auth token for realtime if session exists
+      if (session?.access_token) {
+        supabase.realtime.setAuth(session.access_token);
       }
     };
 
@@ -53,9 +36,7 @@ function App() {
     // Listen for auth state changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log("Auth state changed:", event);
-
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.access_token) {
         supabase.realtime.setAuth(session.access_token);
       }
@@ -70,35 +51,63 @@ function App() {
     <Router>
       <div className="min-h-screen">
         <Navbar />
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/login" element={<Login />} />
-
-          {/* Allow anonymous access to quiz */}
-          <Route path="/quiz" element={<Quiz />} />
-
-          {/* Keep leaderboard protected if needed */}
-          <Route
-            path="/leaderboard"
-            element={
-              <ProtectedRoute>
-                <LeaderboardPage />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute requireAdmin={true}>
-                <AdminPanel />
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
+        <PageTransition />
       </div>
     </Router>
   );
 }
+
+const PageTransition: React.FC = () => {
+  const location = useLocation();
+
+  return (
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        {/* Public route - no authentication required */}
+        <Route path="/login" element={<Login />} />
+
+        {/* All other routes require authentication */}
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <Home />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/quiz"
+          element={
+            <ProtectedRoute>
+              <Quiz />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/leaderboard"
+          element={
+            <ProtectedRoute requireAdmin={true}>
+              <LeaderboardPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute requireAdmin={true}>
+              <AdminPanel />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Catch-all route for undefined paths */}
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </AnimatePresence>
+  );
+};
 
 export default App;
