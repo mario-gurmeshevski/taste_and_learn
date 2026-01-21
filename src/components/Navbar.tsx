@@ -2,13 +2,23 @@ import React, { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaCrown, FaBars, FaTimes, FaUser } from "react-icons/fa";
+import toast from "react-hot-toast";
 import supabase from "../lib/supabase";
+import type { User } from "../config/types";
+import {
+  SPRING_STIFFNESS,
+  SPRING_DAMPING,
+  DB_TABLES,
+  USER_ROLES,
+  ROUTES,
+  DB_FIELDS,
+} from "../config/constants";
 
 const Navbar: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [hoveredPath, setHoveredPath] = useState<string | null>(null);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -24,14 +34,14 @@ const Navbar: React.FC = () => {
         setIsAuthenticated(true);
         // Fetch user data from database (works for both anonymous and regular users)
         const { data: userData } = await supabase
-          .from("users")
+          .from(DB_TABLES.USERS)
           .select("*")
-          .eq("id", session.user.id)
+          .eq(DB_FIELDS.ID, session.user.id)
           .maybeSingle();
 
         if (userData) {
           setCurrentUser(userData);
-          setIsAdmin(userData.role === "admin");
+          setIsAdmin(userData.role === USER_ROLES.ADMIN);
         }
       } else {
         setIsAuthenticated(false);
@@ -50,14 +60,14 @@ const Navbar: React.FC = () => {
         setIsAuthenticated(true);
 
         const { data: userData } = await supabase
-          .from("users")
+          .from(DB_TABLES.USERS)
           .select("*")
-          .eq("id", session.user.id)
+          .eq(DB_FIELDS.ID, session.user.id)
           .maybeSingle();
 
         if (userData) {
           setCurrentUser(userData);
-          setIsAdmin(userData.role === "admin");
+          setIsAdmin(userData.role === USER_ROLES.ADMIN);
         }
       } else {
         setIsAuthenticated(false);
@@ -87,11 +97,17 @@ const Navbar: React.FC = () => {
     : [];
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setCurrentUser(null);
-    setIsAdmin(false);
-    setIsAuthenticated(false);
-    navigate("/login");
+    try {
+      await supabase.auth.signOut();
+      setCurrentUser(null);
+      setIsAdmin(false);
+      setIsAuthenticated(false);
+      toast.success("Logged out successfully", { icon: "👋" });
+      navigate(ROUTES.LOGIN);
+    } catch (error) {
+      console.error("Logout error:", error);
+      toast.error("Failed to log out");
+    }
   };
 
   // Hide navbar on login page
@@ -134,8 +150,8 @@ const Navbar: React.FC = () => {
                     style={{ zIndex: -1 }}
                     transition={{
                       type: "spring",
-                      stiffness: 350,
-                      damping: 30,
+                      stiffness: SPRING_STIFFNESS,
+                      damping: SPRING_DAMPING,
                     }}
                   />
                 )}
@@ -166,9 +182,9 @@ const Navbar: React.FC = () => {
               aria-label="Toggle menu"
             >
               {isMobileMenuOpen ? (
-                <FaTimes className="w-5 h-5" />
+                <FaTimes className="w-5 h-5" aria-hidden="true" />
               ) : (
-                <FaBars className="w-5 h-5" />
+                <FaBars className="w-5 h-5" aria-hidden="true" />
               )}
             </button>
           </div>
@@ -178,13 +194,19 @@ const Navbar: React.FC = () => {
             {isAuthenticated && currentUser ? (
               <div className="flex items-center gap-2 lg:gap-4">
                 <div className="flex items-center gap-2">
-                  <FaUser className="text-neutral-500 text-sm" />
+                  <FaUser
+                    className="text-neutral-500 text-sm"
+                    aria-hidden="true"
+                  />
                   <span className="text-sm text-neutral-700 font-medium truncate max-w-37.5">
-                    {currentUser.name}
+                    {currentUser.name}#{currentUser.discriminator}
                   </span>
                   {isAdmin && (
                     <span className="text-yellow-500">
-                      <FaCrown className="text-sm" />
+                      <FaCrown
+                        className="text-sm"
+                        aria-hidden="true"
+                      />
                     </span>
                   )}
                 </div>
@@ -192,6 +214,7 @@ const Navbar: React.FC = () => {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={handleLogout}
+                  aria-label="Log out of your account"
                   className="rounded-lg bg-neutral-200 px-4 lg:px-5 py-2 text-sm font-medium text-neutral-700 transition-all duration-200 hover:bg-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:ring-offset-2"
                 >
                   Logout
@@ -254,12 +277,18 @@ const Navbar: React.FC = () => {
                       className="pt-2 border-t border-neutral-200 mt-2"
                     >
                       <div className="px-3 py-2 flex items-center gap-2 text-sm text-neutral-700">
-                        <FaUser className="text-neutral-500" />
+                        <FaUser
+                          className="text-neutral-500"
+                          aria-hidden="true"
+                        />
                         <span className="font-medium">
-                          {currentUser.name}
+                          {currentUser.name}#{currentUser.discriminator}
                         </span>
                         {isAdmin && (
-                          <FaCrown className="text-yellow-500 ml-1" />
+                          <FaCrown
+                            className="text-yellow-500 ml-1"
+                            aria-hidden="true"
+                          />
                         )}
                       </div>
                     </motion.div>
@@ -275,6 +304,7 @@ const Navbar: React.FC = () => {
                           handleLogout();
                           setIsMobileMenuOpen(false);
                         }}
+                        aria-label="Log out of your account"
                         className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
                       >
                         Logout
