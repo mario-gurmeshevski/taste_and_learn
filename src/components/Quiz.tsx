@@ -2,24 +2,28 @@ import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { FaCheck, FaTimes, FaPlay, FaPause } from "react-icons/fa";
+import { RealtimeChannel } from "@supabase/supabase-js";
 import supabase from "../lib/supabase";
-import type { BroadcastState } from "../types";
-
-interface Question {
-  id: number;
-  question_text: string;
-  options: string[];
-  correct_answer_index: number;
-  start_timestamp: number;
-  end_timestamp: number;
-}
-
-interface AnswerRecord {
-  question_id: number;
-  selected_option: number;
-  is_correct: boolean;
-  score: number;
-}
+import type {
+  BroadcastState,
+  Question,
+  AnswerRecord,
+} from "../config/types";
+import {
+  POLLING_INTERVAL,
+  RECENT_UPDATE_THRESHOLD,
+  SUBSCRIPTION_TIMEOUT,
+  QUESTION_CLEAR_DELAY,
+  MS_TO_SECONDS,
+  MAX_TIME_ELAPSED_CAP,
+  JUMP_DETECTION_THRESHOLD,
+  BROADCAST_CHANNEL_NAME,
+  DB_TABLES,
+  ROUTES,
+  DB_FIELDS,
+  SORT_ORDER,
+  ANSWER_LABELS,
+} from "../config/constants";
 
 const Quiz: React.FC = () => {
   const navigate = useNavigate();
@@ -32,10 +36,12 @@ const Quiz: React.FC = () => {
   const [showCorrectAnswer, setShowCorrectAnswer] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [userName, setUserName] = useState<string>("");
+  const [userDiscriminator, setUserDiscriminator] = useState<string>("");
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [timeRemaining, setTimeRemaining] = useState<number>(0);
 
   // Video sync state
   const [broadcastState, setBroadcastState] =
@@ -75,7 +81,7 @@ const Quiz: React.FC = () => {
         } = await supabase.auth.getSession();
 
         if (!session) {
-          navigate("/login");
+          navigate(ROUTES.LOGIN);
           return;
         }
 
@@ -88,24 +94,25 @@ const Quiz: React.FC = () => {
         setUserId(currentUserId);
 
         const { data: userData, error: userError } = await supabase
-          .from("users")
-          .select("name")
-          .eq("id", currentUserId)
+          .from(DB_TABLES.USERS)
+          .select("name, discriminator")
+          .eq(DB_FIELDS.ID, currentUserId)
           .single();
 
         if (userError) throw userError;
         setUserName(userData.name);
+        setUserDiscriminator(userData.discriminator);
 
         const { data: questionsData, error: questionsError } =
           await supabase
-            .from("questions")
+            .from(DB_TABLES.QUESTIONS)
             .select("*")
-            .order("start_timestamp", { ascending: true });
+            .order(DB_FIELDS.START_TIMESTAMP, { ascending: SORT_ORDER.ASCENDING });
 
         if (questionsError) throw questionsError;
 
         if (questionsData && questionsData.length > 0) {
-          const formattedQuestions = questionsData.map((q: any) => ({
+          const formattedQuestions = questionsData.map((q) => ({
             id: q.id,
             question_text: q.question_text,
             options: Array.isArray(q.options)
@@ -114,14 +121,14 @@ const Quiz: React.FC = () => {
             correct_answer_index: q.correct_answer_index,
             start_timestamp: q.start_timestamp,
             end_timestamp: q.end_timestamp,
-          }));
+          })) as Question[];
           setQuestions(formattedQuestions);
 
           const { data: sessionData, error: sessionError } =
             await supabase
-              .from("quiz_sessions")
+              .from(DB_TABLES.QUIZ_SESSIONS)
               .insert({
-                user_id: currentUserId,
+                [DB_FIELDS.USER_ID]: currentUserId,
                 started_at: new Date().toISOString(),
                 questions_count: formattedQuestions.length,
               })
@@ -136,7 +143,7 @@ const Quiz: React.FC = () => {
           }));
 
           const { error: linkError } = await supabase
-            .from("quiz_session_questions")
+            .from(DB_TABLES.QUIZ_SESSION_QUESTIONS)
             .insert(sessionQuestions);
 
           if (linkError) throw linkError;
@@ -158,7 +165,7 @@ const Quiz: React.FC = () => {
 
   // Subscribe to broadcast state
   useEffect(() => {
-    let channel: any;
+    let channel: RealtimeChannel | null = null;
     let subscriptionTimer: ReturnType<typeof setTimeout> | null =
       null;
     let pollInterval: ReturnType<typeof setInterval> | null = null;
@@ -169,7 +176,7 @@ const Quiz: React.FC = () => {
       pollInterval = setInterval(async () => {
         try {
           const { data } = await supabase
-            .from("public_broadcast_state")
+            .from(DB_TABLES.PUBLIC_BROADCAST_STATE)
             .select("*")
             .maybeSingle();
 
@@ -185,7 +192,7 @@ const Quiz: React.FC = () => {
         } catch (error) {
           console.error("Error polling:", error);
         }
-      }, 5000);
+      }, POLLING_INTERVAL);
     };
 
     const stopPolling = () => {
@@ -204,7 +211,7 @@ const Quiz: React.FC = () => {
 
         // Fetch initial state
         const { data } = await supabase
-          .from("public_broadcast_state")
+          .from(DB_TABLES.PUBLIC_BROADCAST_STATE)
           .select("*")
           .maybeSingle();
 
@@ -224,11 +231,11 @@ const Quiz: React.FC = () => {
           if (!hasSuccessfullySubscribedRef.current) {
             startPolling();
           }
-        }, 10000);
+        }, SUBSCRIPTION_TIMEOUT);
 
         // Subscribe to broadcast
         channel = supabase
-          .channel("broadcast-sync")
+          .channel(BROADCAST_CHANNEL_NAME)
           .on(
             "broadcast",
             { event: "broadcast-state-update" },
@@ -297,7 +304,8 @@ const Quiz: React.FC = () => {
       // Always update if this is the first state or position changed
       // Use timestamp to detect fresh updates (within last 5 seconds = recent admin action)
       const currentTime = Date.now();
-      const isRecentUpdate = currentTime - newTimestamp < 5000; // 5 seconds
+      const isRecentUpdate =
+        currentTime - newTimestamp < RECENT_UPDATE_THRESHOLD; // 5 seconds
 
       if (
         !lastKnownStateRef.current ||
@@ -325,11 +333,14 @@ const Quiz: React.FC = () => {
 
       const now = Date.now();
       const timeElapsed =
-        (now - lastKnownStateRef.current.timestamp) / 1000;
+        (now - lastKnownStateRef.current.timestamp) / MS_TO_SECONDS;
 
       // Sanity check: if timeElapsed is negative or too large, use the base position
       // This can happen if there's a clock sync issue or timestamp parsing problem
-      const safeTimeElapsed = Math.max(0, Math.min(timeElapsed, 60)); // Cap at 60 seconds
+      const safeTimeElapsed = Math.max(
+        0,
+        Math.min(timeElapsed, MAX_TIME_ELAPSED_CAP),
+      ); // Cap at MAX_TIME_ELAPSED_CAP seconds
 
       const expectedPosition = lastKnownStateRef.current.isPlaying
         ? lastKnownStateRef.current.position + safeTimeElapsed
@@ -359,8 +370,11 @@ const Quiz: React.FC = () => {
     // Skip detection on initial sync
     const positionDelta = videoPosition - previousPositionRef.current;
 
-    if (initialSyncDoneRef.current && positionDelta > 2) {
-      // Jump of more than 2 seconds detected (after initial sync)
+    if (
+      initialSyncDoneRef.current &&
+      positionDelta > JUMP_DETECTION_THRESHOLD
+    ) {
+      // Jump of more than JUMP_DETECTION_THRESHOLD seconds detected (after initial sync)
       // Find and auto-submit any missed questions
       const missedQuestions = questions.filter(
         (q) =>
@@ -415,7 +429,7 @@ const Quiz: React.FC = () => {
             setSelectedOption(null);
             setHasSubmitted(false);
             setShowCorrectAnswer(false);
-          }, 2000);
+          }, QUESTION_CLEAR_DELAY);
           return; // Don't clear immediately
         }
       }
@@ -443,6 +457,26 @@ const Quiz: React.FC = () => {
       saveQuizResults(answersRef.current);
     }
   }, [answers, questions.length, quizCompleted]);
+
+  // Update time remaining every second when a question is active
+  useEffect(() => {
+    if (!currentQuestion) {
+      setTimeRemaining(0);
+      return;
+    }
+
+    // Calculate initial time remaining
+    const remaining = Math.max(0, currentQuestion.end_timestamp - videoPosition);
+    setTimeRemaining(remaining);
+
+    // Update every second
+    const interval = setInterval(() => {
+      const newRemaining = Math.max(0, currentQuestion.end_timestamp - videoPosition);
+      setTimeRemaining(newRemaining);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [currentQuestion?.id, currentQuestion?.end_timestamp, videoPosition]);
 
   const handleAutoSubmit = (question: Question) => {
     const newAnswer: AnswerRecord = {
@@ -494,7 +528,7 @@ const Quiz: React.FC = () => {
       }));
 
       const { error: answersError } = await supabase
-        .from("answers")
+        .from(DB_TABLES.ANSWERS)
         .insert(answersWithUserId);
 
       if (answersError) throw answersError;
@@ -505,22 +539,17 @@ const Quiz: React.FC = () => {
       );
 
       const { error: sessionError } = await supabase
-        .from("quiz_sessions")
+        .from(DB_TABLES.QUIZ_SESSIONS)
         .update({
-          completed_at: new Date().toISOString(),
+          [DB_FIELDS.COMPLETED_AT]: new Date().toISOString(),
           total_score: totalScore,
         })
-        .eq("id", sessionId);
+        .eq(DB_FIELDS.ID, sessionId);
 
       if (sessionError) throw sessionError;
     } catch (error) {
       console.error("Error saving quiz results:", error);
     }
-  };
-
-  const getTimeRemaining = () => {
-    if (!currentQuestion) return 0;
-    return Math.max(0, currentQuestion.end_timestamp - videoPosition);
   };
 
   const getNextQuestion = () => {
@@ -584,7 +613,7 @@ const Quiz: React.FC = () => {
             of {questions.length} correct
           </div>
           <p className="text-neutral-700 mb-8">
-            Well done, <span className="font-medium">{userName}</span>
+            Well done, <span className="font-medium">{userName}#{userDiscriminator}</span>
             !
           </p>
         </motion.div>
@@ -634,11 +663,11 @@ const Quiz: React.FC = () => {
                 <span className="inline-flex items-center gap-1">
                   {lastKnownState.isPlaying ? (
                     <>
-                      <FaPlay /> Playing
+                      <FaPlay aria-hidden="true" /> Playing
                     </>
                   ) : (
                     <>
-                      <FaPause /> Paused
+                      <FaPause aria-hidden="true" /> Paused
                     </>
                   )}
                 </span>
@@ -662,7 +691,7 @@ const Quiz: React.FC = () => {
                 </h1>
                 <div className="flex items-center gap-2">
                   <span className="text-xs sm:text-sm font-medium text-gray-700">
-                    {Math.ceil(getTimeRemaining())}s remaining
+                    {Math.ceil(timeRemaining)}s remaining
                   </span>
                 </div>
               </div>
@@ -673,7 +702,11 @@ const Quiz: React.FC = () => {
                 </h2>
 
                 {/* Enhanced 2x2 grid with clean monochrome design */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-6 sm:mb-8">
+                <div
+                  className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-6 sm:mb-8"
+                  role="group"
+                  aria-label="Quiz answer options"
+                >
                   {currentQuestion.options.map((option, index) => {
                     const isSelected = selectedOption === index;
                     const isCorrect =
@@ -731,6 +764,10 @@ const Quiz: React.FC = () => {
                         whileTap={
                           !hasSubmitted ? { scale: 0.98 } : {}
                         }
+                        disabled={hasSubmitted}
+                        aria-label={`Answer option ${ANSWER_LABELS[index]}: ${option}`}
+                        aria-pressed={isSelected}
+                        aria-disabled={hasSubmitted}
                         className={`
                           relative h-32 sm:h-40 md:h-44 rounded-2xl font-semibold
                           transition-all duration-200
@@ -745,8 +782,9 @@ const Quiz: React.FC = () => {
                           flex items-center justify-center text-xl sm:text-2xl font-black
                           ${letterBgClass} ${letterTextClass}
                         `}
+                          aria-hidden="true"
                         >
-                          {String.fromCharCode(65 + index)}
+                          {ANSWER_LABELS[index]}
                         </div>
 
                         {/* Answer text */}
@@ -758,13 +796,25 @@ const Quiz: React.FC = () => {
 
                         {/* Result indicator */}
                         {showResult && isCorrect && (
-                          <div className="absolute top-4 right-4 text-green-500">
-                            <FaCheck className="w-8 h-8" />
+                          <div
+                            className="absolute top-4 right-4 text-green-500"
+                            aria-label="Correct answer"
+                          >
+                            <FaCheck
+                              className="w-8 h-8"
+                              aria-hidden="true"
+                            />
                           </div>
                         )}
                         {showResult && isSelected && !wasCorrect && (
-                          <div className="absolute top-4 right-4 text-red-500">
-                            <FaTimes className="w-8 h-8" />
+                          <div
+                            className="absolute top-4 right-4 text-red-500"
+                            aria-label="Incorrect answer"
+                          >
+                            <FaTimes
+                              className="w-8 h-8"
+                              aria-hidden="true"
+                            />
                           </div>
                         )}
                       </motion.button>
@@ -780,6 +830,7 @@ const Quiz: React.FC = () => {
                       exit={{ opacity: 0, y: -10 }}
                       onClick={handleSubmitAnswer}
                       disabled={hasSubmitted}
+                      aria-label="Submit your answer"
                       className={`w-full px-6 sm:px-8 py-3 sm:py-4 text-base sm:text-lg font-bold rounded-lg transition-colors ${
                         hasSubmitted
                           ? "bg-gray-300 text-gray-400 cursor-not-allowed"

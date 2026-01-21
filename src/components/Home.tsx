@@ -1,4 +1,10 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  lazy,
+  Suspense,
+} from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaLock,
@@ -6,14 +12,29 @@ import {
   FaPause,
   FaBroadcastTower,
 } from "react-icons/fa";
+import toast from "react-hot-toast";
 import supabase from "../lib/supabase";
 import videoFile from "../assets/video.mp4";
-import { Plyr } from "plyr-react";
 import "plyr-react/plyr.css";
-import type { BroadcastState, PlyrRef } from "../types";
+import type { BroadcastState, PlyrRef, User } from "../config/types";
+import { VideoPlayerSkeleton } from "./Skeleton";
+import {
+  VIDEO_SYNC_INTERVAL,
+  POLLING_INTERVAL,
+  MAX_DRIFT_TOLERANCE,
+  MS_TO_SECONDS,
+  BROADCAST_CHANNEL_NAME,
+  DB_TABLES,
+  USER_ROLES,
+  DB_FIELDS,
+} from "../config/constants";
+
+const Plyr = lazy(() =>
+  import("plyr-react").then((module) => ({ default: module.Plyr })),
+);
 
 const Home: React.FC = () => {
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [broadcastState, setBroadcastState] =
     useState<BroadcastState | null>(null);
   const [isLocallyPaused, setIsLocallyPaused] = useState(false);
@@ -43,9 +64,9 @@ const Home: React.FC = () => {
 
       if (session?.user) {
         const { data: userData } = await supabase
-          .from("users")
+          .from(DB_TABLES.USERS)
           .select("*")
-          .eq("id", session.user.id)
+          .eq(DB_FIELDS.ID, session.user.id)
           .maybeSingle();
 
         if (userData) {
@@ -66,9 +87,9 @@ const Home: React.FC = () => {
 
         if (session?.user) {
           const { data: userData } = await supabase
-            .from("users")
+            .from(DB_TABLES.USERS)
             .select("*")
-            .eq("id", session.user.id)
+            .eq(DB_FIELDS.ID, session.user.id)
             .maybeSingle();
 
           if (userData) {
@@ -141,7 +162,8 @@ const Home: React.FC = () => {
 
       // Calculate expected position based on time elapsed
       const now = Date.now();
-      const timeElapsed = (now - lastKnownState.timestamp) / 1000;
+      const timeElapsed =
+        (now - lastKnownState.timestamp) / MS_TO_SECONDS;
       const expectedPosition = lastKnownState.isPlaying
         ? lastKnownState.position + timeElapsed
         : lastKnownState.position;
@@ -149,8 +171,8 @@ const Home: React.FC = () => {
       const currentTime = player.currentTime || 0;
       const timeDiff = Math.abs(expectedPosition - currentTime);
 
-      // Only sync if drift > 1 second
-      if (timeDiff > 1.0 && !player.seeking) {
+      // Only sync if drift > MAX_DRIFT_TOLERANCE second
+      if (timeDiff > MAX_DRIFT_TOLERANCE && !player.seeking) {
         isUpdatingFromBroadcast.current = true;
         player.currentTime = expectedPosition;
 
@@ -165,7 +187,7 @@ const Home: React.FC = () => {
       } else if (!lastKnownState.isPlaying && !player.paused) {
         player.pause();
       }
-    }, 1000);
+    }, VIDEO_SYNC_INTERVAL);
 
     return () => clearInterval(syncInterval);
   }, [isPlayerReady, isLocallyPaused, lastKnownState]);
@@ -182,7 +204,7 @@ const Home: React.FC = () => {
     const setupSubscription = async () => {
       // Fetch initial state first
       const { data } = await supabase
-        .from("public_broadcast_state")
+        .from(DB_TABLES.PUBLIC_BROADCAST_STATE)
         .select("*")
         .maybeSingle();
 
@@ -199,7 +221,7 @@ const Home: React.FC = () => {
 
       // Set up realtime broadcast subscription
       channel = supabase
-        .channel("broadcast-sync") // Same channel name as Quiz and Admin
+        .channel(BROADCAST_CHANNEL_NAME) // Same channel name as Quiz and Admin
         .on(
           "broadcast",
           { event: "broadcast-state-update" },
@@ -224,7 +246,7 @@ const Home: React.FC = () => {
         if (!broadcastSubscribed) {
           // Will use polling instead
         }
-      }, 5000);
+      }, POLLING_INTERVAL);
     };
 
     setupSubscription();
@@ -246,7 +268,7 @@ const Home: React.FC = () => {
 
     const pollInterval = setInterval(async () => {
       const { data } = await supabase
-        .from("public_broadcast_state")
+        .from(DB_TABLES.PUBLIC_BROADCAST_STATE)
         .select("*")
         .maybeSingle();
 
@@ -262,6 +284,7 @@ const Home: React.FC = () => {
     if (plyrRef.current?.plyr && isPlayerReady) {
       plyrRef.current.plyr.pause();
       setIsLocallyPaused(true);
+      toast("Video paused locally", { icon: "⏸️" });
     }
   };
 
@@ -274,13 +297,15 @@ const Home: React.FC = () => {
     ) {
       // Calculate current expected position
       const now = Date.now();
-      const timeElapsed = (now - lastKnownState.timestamp) / 1000;
+      const timeElapsed =
+        (now - lastKnownState.timestamp) / MS_TO_SECONDS;
       const expectedPosition = lastKnownState.isPlaying
         ? lastKnownState.position + timeElapsed
         : lastKnownState.position;
 
       plyrRef.current.plyr.currentTime = expectedPosition;
       setIsLocallyPaused(false);
+      toast("Resumed to live broadcast", { icon: "▶️" });
 
       if (lastKnownState.isPlaying) {
         setTimeout(() => {
@@ -290,7 +315,7 @@ const Home: React.FC = () => {
     }
   };
 
-  if (currentUser?.role === "admin") {
+  if (currentUser?.role === USER_ROLES.ADMIN) {
     return (
       <div className="pt-16 bg-black min-h-screen flex items-center justify-center">
         <motion.div
@@ -354,7 +379,8 @@ const Home: React.FC = () => {
               className="bg-yellow-900 border border-yellow-600 text-yellow-200 p-3 sm:p-4 mb-3 sm:mb-4 rounded-lg overflow-hidden"
             >
               <p className="font-medium flex items-center gap-2 text-sm sm:text-base">
-                <FaPause /> You've paused the stream locally
+                <FaPause aria-hidden="true" /> You've paused the
+                stream locally
               </p>
               <p className="text-xs sm:text-sm">
                 Click "Resume to Live" to jump back to the admin's
@@ -371,8 +397,8 @@ const Home: React.FC = () => {
           className="bg-blue-900 border border-blue-600 text-blue-200 p-3 sm:p-4 mb-3 sm:mb-4 rounded-lg"
         >
           <p className="font-medium text-xs sm:text-sm flex items-center gap-2">
-            <FaLock /> You are viewing a live broadcast controlled by
-            the admin
+            <FaLock aria-hidden="true" /> You are viewing a live
+            broadcast controlled by the admin
           </p>
           <p className="text-xs mt-1">
             You can pause locally, but you cannot seek or control
@@ -380,12 +406,18 @@ const Home: React.FC = () => {
             <span className="inline-flex items-center gap-1">
               {isSubscribed ? (
                 <>
-                  <FaBroadcastTower className="text-green-400" />
+                  <FaBroadcastTower
+                    className="text-green-400"
+                    aria-hidden="true"
+                  />
                   Connected
                 </>
               ) : (
                 <>
-                  <FaBroadcastTower className="text-yellow-400" />
+                  <FaBroadcastTower
+                    className="text-yellow-400"
+                    aria-hidden="true"
+                  />
                   Connecting...
                 </>
               )}
@@ -399,19 +431,21 @@ const Home: React.FC = () => {
           transition={{ delay: 0.3, duration: 0.5 }}
           className="w-full h-[calc(100vh-16rem)]"
         >
-          <Plyr
-            ref={plyrRef}
-            source={videoSrc}
-            options={{
-              controls: [],
-              hideControls: true,
-              clickToPlay: false,
-              keyboard: { focused: false, global: false },
-              seekTime: 0,
-              disableContextMenu: true,
-              resetOnEnd: false,
-            }}
-          />
+          <Suspense fallback={<VideoPlayerSkeleton />}>
+            <Plyr
+              ref={plyrRef}
+              source={videoSrc}
+              options={{
+                controls: [],
+                hideControls: true,
+                clickToPlay: false,
+                keyboard: { focused: false, global: false },
+                seekTime: 0,
+                disableContextMenu: true,
+                resetOnEnd: false,
+              }}
+            />
+          </Suspense>
         </motion.div>
 
         <motion.div
@@ -431,13 +465,16 @@ const Home: React.FC = () => {
                 exit={{ opacity: 0, scale: 0.9 }}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
+                aria-label="Pause video locally"
+                aria-describedby="pause-description"
                 className={`${
                   isPlayerReady
                     ? "bg-neutral-900 hover:bg-neutral-800"
                     : "bg-gray-500 cursor-not-allowed opacity-50"
                 } text-white px-4 sm:px-6 py-2 sm:py-3 rounded text-xs sm:text-sm font-medium transition-colors flex items-center gap-1 sm:gap-2`}
               >
-                <FaPause className="text-sm sm:text-base" /> Pause Locally
+                <FaPause className="text-sm sm:text-base" /> Pause
+                Locally
               </motion.button>
             ) : (
               <motion.button
@@ -449,16 +486,25 @@ const Home: React.FC = () => {
                 exit={{ opacity: 0, scale: 0.9 }}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
+                aria-label="Resume to live broadcast"
+                aria-describedby="resume-description"
                 className={`${
                   isPlayerReady
                     ? "bg-green-600 hover:bg-green-700"
                     : "bg-gray-500 cursor-not-allowed opacity-50"
                 } text-white px-4 sm:px-6 py-2 sm:py-3 rounded text-xs sm:text-sm font-medium transition-colors flex items-center gap-1 sm:gap-2`}
               >
-                <FaPlay className="text-sm sm:text-base" /> Resume to Live
+                <FaPlay className="text-sm sm:text-base" /> Resume to
+                Live
               </motion.button>
             )}
           </AnimatePresence>
+          <span id="pause-description" className="sr-only">
+            Pause the video locally while the broadcast continues
+          </span>
+          <span id="resume-description" className="sr-only">
+            Resume video and sync to the live broadcast position
+          </span>
         </motion.div>
 
         <motion.div
@@ -477,11 +523,11 @@ const Home: React.FC = () => {
             <span className="font-medium inline-flex items-center gap-1">
               {broadcastState?.is_playing ? (
                 <>
-                  <FaPlay /> Live
+                  <FaPlay aria-hidden="true" /> Live
                 </>
               ) : (
                 <>
-                  <FaPause /> Paused
+                  <FaPause aria-hidden="true" /> Paused
                 </>
               )}
             </span>

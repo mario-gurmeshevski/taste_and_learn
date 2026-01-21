@@ -14,16 +14,25 @@ import {
   FaForward,
   FaSpinner,
 } from "react-icons/fa";
+import toast from "react-hot-toast";
 import supabase from "../lib/supabase";
 import videoFile from "../assets/video.mp4";
 import { Plyr } from "plyr-react";
 import "plyr-react/plyr.css";
-import type { BroadcastState, PlyrRef } from "../types";
+import type { BroadcastState, PlyrRef, User } from "../config/types";
+import {
+  ADMIN_SYNC_INTERVAL,
+  SKIP_AMOUNT,
+  BROADCAST_CHANNEL_NAME,
+  DB_TABLES,
+  USER_ROLES,
+  DB_FIELDS,
+} from "../config/constants";
 
 const AdminPanel: React.FC = () => {
   const [broadcastState, setBroadcastState] =
     useState<BroadcastState | null>(null);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isPlayerReady, setIsPlayerReady] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -75,12 +84,12 @@ const AdminPanel: React.FC = () => {
       }
 
       const { data: userData } = await supabase
-        .from("users")
+        .from(DB_TABLES.USERS)
         .select("*")
-        .eq("id", session.user.id)
+        .eq(DB_FIELDS.ID, session.user.id)
         .maybeSingle();
 
-      if (!userData || userData.role !== "admin") {
+      if (!userData || userData.role !== USER_ROLES.ADMIN) {
         window.location.href = "/";
         return;
       }
@@ -111,7 +120,7 @@ const AdminPanel: React.FC = () => {
         };
 
         const { error } = await supabase
-          .from("public_broadcast_state")
+          .from(DB_TABLES.PUBLIC_BROADCAST_STATE)
           .update(updateData)
           .eq("id", broadcastStateRef.current.id);
 
@@ -164,7 +173,7 @@ const AdminPanel: React.FC = () => {
         const currentTime = plyrRef.current.plyr.currentTime;
         updateBroadcastState({ current_position: currentTime });
       }
-    }, 30000);
+    }, ADMIN_SYNC_INTERVAL);
 
     return () => clearInterval(syncInterval);
   }, [
@@ -200,7 +209,7 @@ const AdminPanel: React.FC = () => {
 
     const fetchBroadcastState = async () => {
       const { data } = await supabase
-        .from("public_broadcast_state")
+        .from(DB_TABLES.PUBLIC_BROADCAST_STATE)
         .select("*")
         .maybeSingle();
 
@@ -225,7 +234,7 @@ const AdminPanel: React.FC = () => {
 
     // Set up broadcast channel for sending updates
     const channel = supabase
-      .channel("broadcast-sync")
+      .channel(BROADCAST_CHANNEL_NAME)
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
           broadcastChannelRef.current = channel;
@@ -255,8 +264,11 @@ const AdminPanel: React.FC = () => {
       setTimeout(() => {
         plyrRef.current?.plyr.play().catch(console.error);
       }, 100);
+
+      toast.success("Broadcast started", { icon: "▶️" });
     } catch (error) {
       console.error("Error in handlePlay:", error);
+      toast.error("Failed to start broadcast");
     }
   };
 
@@ -271,8 +283,11 @@ const AdminPanel: React.FC = () => {
         is_playing: false,
         current_position: currentPosition,
       });
+
+      toast.success("Broadcast paused", { icon: "⏸️" });
     } catch (error) {
       console.error("Error in handlePause:", error);
+      toast.error("Failed to pause broadcast");
     }
   };
 
@@ -284,6 +299,7 @@ const AdminPanel: React.FC = () => {
       await updateBroadcastState({ current_position: seconds });
     } catch (error) {
       console.error("Error in handleSeek:", error);
+      toast.error("Failed to seek video");
     }
   };
 
@@ -296,6 +312,9 @@ const AdminPanel: React.FC = () => {
       is_playing: false,
       current_position: 0,
     });
+    toast.success("Broadcast restarted from beginning", {
+      icon: "🔄",
+    });
   };
 
   const handleSkipForward = async () => {
@@ -303,9 +322,11 @@ const AdminPanel: React.FC = () => {
 
     try {
       const currentTime = plyrRef.current.plyr.currentTime;
-      await handleSeek(currentTime + 10);
+      await handleSeek(currentTime + SKIP_AMOUNT);
+      toast(`Skipped forward ${SKIP_AMOUNT} seconds`, { icon: "⏩" });
     } catch (error) {
       console.error("Error in handleSkipForward:", error);
+      toast.error("Failed to skip forward");
     }
   };
 
@@ -314,9 +335,13 @@ const AdminPanel: React.FC = () => {
 
     try {
       const currentTime = plyrRef.current.plyr.currentTime;
-      await handleSeek(Math.max(0, currentTime - 10));
+      await handleSeek(Math.max(0, currentTime - SKIP_AMOUNT));
+      toast(`Skipped backward ${SKIP_AMOUNT} seconds`, {
+        icon: "⏪",
+      });
     } catch (error) {
       console.error("Error in handleSkipBackward:", error);
+      toast.error("Failed to skip backward");
     }
   };
 
@@ -328,7 +353,7 @@ const AdminPanel: React.FC = () => {
     );
   }
 
-  if (!currentUser || currentUser.role !== "admin") {
+  if (!currentUser || currentUser.role !== USER_ROLES.ADMIN) {
     return null;
   }
 
@@ -345,7 +370,11 @@ const AdminPanel: React.FC = () => {
             Admin Broadcast Controls
           </h2>
 
-          <div className="flex flex-wrap gap-2 mb-3 sm:mb-4">
+          <div
+            className="flex flex-wrap gap-2 mb-3 sm:mb-4"
+            role="group"
+            aria-label="Broadcast controls"
+          >
             <motion.button
               onClick={handlePlay}
               disabled={!isPlayerReady}
@@ -366,13 +395,15 @@ const AdminPanel: React.FC = () => {
                   ? { scale: 0.95, transition: { duration: 0.1 } }
                   : {}
               }
+              aria-label="Start or play broadcast"
               className={`${
                 isPlayerReady
                   ? "bg-green-500/30 border-green-400/30 shadow-lg shadow-green-500/20"
                   : "bg-gray-500/20 border-gray-500/20 cursor-not-allowed opacity-50"
               } backdrop-blur-md text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium border flex items-center gap-1 sm:gap-2`}
             >
-              <FaPlay className="text-sm" /> Start/Play
+              <FaPlay className="text-sm" aria-hidden="true" />{" "}
+              Start/Play
             </motion.button>
 
             <motion.button
@@ -395,13 +426,14 @@ const AdminPanel: React.FC = () => {
                   ? { scale: 0.95, transition: { duration: 0.1 } }
                   : {}
               }
+              aria-label="Pause broadcast"
               className={`${
                 isPlayerReady
                   ? "bg-yellow-500/30 border-yellow-400/30 shadow-lg shadow-yellow-500/20"
                   : "bg-gray-500/20 border-gray-500/20 cursor-not-allowed opacity-50"
               } backdrop-blur-md text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium border flex items-center gap-1 sm:gap-2`}
             >
-              <FaPause className="text-sm" /> Pause
+              <FaPause className="text-sm" aria-hidden="true" /> Pause
             </motion.button>
 
             <motion.button
@@ -424,13 +456,15 @@ const AdminPanel: React.FC = () => {
                   ? { scale: 0.95, transition: { duration: 0.1 } }
                   : {}
               }
+              aria-label="Restart broadcast from beginning"
               className={`${
                 isPlayerReady
                   ? "bg-blue-500/30 border-blue-400/30 shadow-lg shadow-blue-500/20"
                   : "bg-gray-500/20 border-gray-500/20 cursor-not-allowed opacity-50"
               } backdrop-blur-md text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium border flex items-center gap-1 sm:gap-2`}
             >
-              <FaRedo className="text-sm" /> Restart
+              <FaRedo className="text-sm" aria-hidden="true" />{" "}
+              Restart
             </motion.button>
 
             <motion.button
@@ -453,13 +487,15 @@ const AdminPanel: React.FC = () => {
                   ? { scale: 0.95, transition: { duration: 0.1 } }
                   : {}
               }
+              aria-label={`Skip backward ${SKIP_AMOUNT} seconds`}
               className={`${
                 isPlayerReady
                   ? "bg-neutral-400/20 border-neutral-400/20 shadow-lg shadow-neutral-500/10"
                   : "bg-gray-500/20 border-gray-500/20 cursor-not-allowed opacity-50"
               } backdrop-blur-md text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium border flex items-center gap-1 sm:gap-2`}
             >
-              <FaBackward className="text-sm" /> -10s
+              <FaBackward className="text-sm" aria-hidden="true" />{" "}
+              -10s
             </motion.button>
 
             <motion.button
@@ -482,13 +518,15 @@ const AdminPanel: React.FC = () => {
                   ? { scale: 0.95, transition: { duration: 0.1 } }
                   : {}
               }
+              aria-label={`Skip forward ${SKIP_AMOUNT} seconds`}
               className={`${
                 isPlayerReady
                   ? "bg-neutral-400/20 border-neutral-400/20 shadow-lg shadow-neutral-500/10"
                   : "bg-gray-500/20 border-gray-500/20 cursor-not-allowed opacity-50"
               } backdrop-blur-md text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium border flex items-center gap-1 sm:gap-2`}
             >
-              <FaForward className="text-sm" /> +10s
+              <FaForward className="text-sm" aria-hidden="true" />{" "}
+              +10s
             </motion.button>
           </div>
 
@@ -503,11 +541,11 @@ const AdminPanel: React.FC = () => {
               <span className="font-bold flex items-center gap-2">
                 {broadcastState?.is_playing ? (
                   <>
-                    <FaPlay /> Playing
+                    <FaPlay aria-hidden="true" /> Playing
                   </>
                 ) : (
                   <>
-                    <FaPause /> Paused
+                    <FaPause aria-hidden="true" /> Paused
                   </>
                 )}
               </span>

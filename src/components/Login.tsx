@@ -2,7 +2,15 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { FaSpinner } from "react-icons/fa";
+import toast from "react-hot-toast";
 import supabase from "../lib/supabase";
+import {
+  DB_TABLES,
+  USER_ROLES,
+  ROUTES,
+  DB_FIELDS,
+} from "../config/constants";
+import { generateDiscriminator } from "../lib/discriminator";
 
 const Login: React.FC = () => {
   const [isAdminLogin, setIsAdminLogin] = useState(false);
@@ -65,11 +73,21 @@ const Login: React.FC = () => {
         supabase.realtime.setAuth(authData.session.access_token);
       }
 
+      const discriminator = generateDiscriminator(newUserId);
+
       const { error: insertError } = await supabase
-        .from("users")
-        .upsert({ id: newUserId, name: userName, role: "user" });
+        .from(DB_TABLES.USERS)
+        .upsert({
+          id: newUserId,
+          name: userName,
+          discriminator: discriminator,
+          role: USER_ROLES.USER,
+        });
 
       if (insertError) throw insertError;
+
+      const displayName = `${userName}#${discriminator}`;
+      toast.success(`Welcome, ${displayName}!`);
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
@@ -79,10 +97,12 @@ const Login: React.FC = () => {
         localStorage.removeItem("redirectPath");
         navigate(redirectPath);
       } else {
-        navigate("/quiz");
+        navigate(ROUTES.QUIZ);
       }
     } catch (err) {
-      setError("Error creating account. Please try again.");
+      const errorMsg = "Error creating account. Please try again.";
+      setError(errorMsg);
+      toast.error(errorMsg);
       console.error("Anonymous login error:", err);
     } finally {
       setLoading(false);
@@ -130,10 +150,12 @@ const Login: React.FC = () => {
         supabase.realtime.setAuth(authData.session.access_token);
       }
 
+      toast.success("Admin login successful!");
+
       const { data: userData, error: userError } = await supabase
-        .from("users")
+        .from(DB_TABLES.USERS)
         .select("*")
-        .eq("id", authData.user.id)
+        .eq(DB_FIELDS.ID, authData.user.id)
         .maybeSingle();
 
       if (userError) {
@@ -144,12 +166,14 @@ const Login: React.FC = () => {
       }
 
       if (!userData) {
+        const discriminator = generateDiscriminator(authData.user.id);
         const { error: insertError } = await supabase
-          .from("users")
+          .from(DB_TABLES.USERS)
           .upsert({
             id: authData.user.id,
             name: email.split("@")[0],
-            role: "user",
+            discriminator: discriminator,
+            role: USER_ROLES.USER,
           });
 
         if (insertError) {
@@ -163,7 +187,7 @@ const Login: React.FC = () => {
           localStorage.removeItem("redirectPath");
           navigate(redirectPath);
         } else {
-          navigate("/");
+          navigate(ROUTES.HOME);
         }
         return;
       }
@@ -176,10 +200,10 @@ const Login: React.FC = () => {
         localStorage.removeItem("redirectPath");
         navigate(redirectPath);
       } else {
-        if (userData.role === "admin") {
-          navigate("/admin");
+        if (userData.role === USER_ROLES.ADMIN) {
+          navigate(ROUTES.ADMIN);
         } else {
-          navigate("/");
+          navigate(ROUTES.HOME);
         }
       }
     } catch (err) {
@@ -229,7 +253,12 @@ const Login: React.FC = () => {
               placeholder="Your name"
               className="w-full px-4 py-3 border border-neutral-300 text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 mb-6 text-sm"
               required
+              aria-label="Enter your name to start the quiz"
+              aria-describedby="name-description"
             />
+            <span id="name-description" className="sr-only">
+              Enter your display name for the quiz session
+            </span>
             <motion.button
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -238,6 +267,8 @@ const Login: React.FC = () => {
               whileTap={{ scale: 0.98 }}
               type="submit"
               disabled={loading}
+              aria-label="Start quiz with provided name"
+              aria-busy={loading}
               className={`w-full bg-neutral-900 text-white py-3 text-sm font-medium hover:bg-neutral-800 transition-colors duration-200 ${
                 loading ? "opacity-70 cursor-not-allowed" : ""
               }`}
@@ -267,7 +298,12 @@ const Login: React.FC = () => {
                 placeholder="your@email.com"
                 className="w-full px-4 py-3 border border-neutral-300 text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 text-sm"
                 required
+                aria-label="Email address for admin login"
+                aria-describedby="email-description"
               />
+              <span id="email-description" className="sr-only">
+                Enter your admin email address
+              </span>
             </motion.div>
 
             <motion.div
@@ -290,7 +326,12 @@ const Login: React.FC = () => {
                 placeholder="••••••••"
                 className="w-full px-4 py-3 border border-neutral-300 text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 text-sm"
                 required
+                aria-label="Password for admin login"
+                aria-describedby="password-description"
               />
+              <span id="password-description" className="sr-only">
+                Enter your admin password
+              </span>
             </motion.div>
 
             <motion.button
@@ -301,6 +342,8 @@ const Login: React.FC = () => {
               whileTap={{ scale: 0.98 }}
               type="submit"
               disabled={loading}
+              aria-label="Log in as admin"
+              aria-busy={loading}
               className={`w-full bg-neutral-900 text-white py-3 text-sm font-medium hover:bg-neutral-800 transition-colors duration-200 ${
                 loading ? "opacity-70 cursor-not-allowed" : ""
               }`}
@@ -321,6 +364,11 @@ const Login: React.FC = () => {
               setIsAdminLogin(!isAdminLogin);
               setError("");
             }}
+            aria-label={
+              isAdminLogin
+                ? "Switch to user login"
+                : "Switch to admin login"
+            }
             className="text-sm text-neutral-600 hover:text-neutral-900 transition-colors"
           >
             {isAdminLogin

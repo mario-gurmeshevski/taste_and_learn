@@ -2,11 +2,8 @@ import React, { useEffect, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { FaSpinner } from "react-icons/fa";
 import supabase from "../lib/supabase";
-
-interface ProtectedRouteProps {
-  children: React.ReactNode;
-  requireAdmin?: boolean;
-}
+import type { ProtectedRouteProps, BasicUser } from "../config/types";
+import { DB_TABLES, USER_ROLES, DB_FIELDS } from "../config/constants";
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   children,
@@ -14,7 +11,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 }) => {
   const location = useLocation();
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<BasicUser | null>(null);
   const [hasSession, setHasSession] = useState(false);
 
   useEffect(() => {
@@ -35,18 +32,18 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
       if (!isAnonUser) {
         const { data: userData, error } = await supabase
-          .from("users")
+          .from(DB_TABLES.USERS)
           .select("*")
-          .eq("id", session.user.id)
+          .eq(DB_FIELDS.ID, session.user.id)
           .maybeSingle();
 
         if (error) {
           console.error("Error fetching user:", error);
-          setUser({ role: "user" });
+          setUser({ role: USER_ROLES.USER });
         } else if (userData) {
           setUser(userData);
         } else {
-          setUser({ role: "user" });
+          setUser({ role: USER_ROLES.USER });
         }
       } else {
         setUser({ role: "user" });
@@ -66,18 +63,18 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
         if (!isAnonUser) {
           const { data: userData, error } = await supabase
-            .from("users")
+            .from(DB_TABLES.USERS)
             .select("*")
-            .eq("id", session.user.id)
+            .eq(DB_FIELDS.ID, session.user.id)
             .maybeSingle();
 
           if (error) {
             console.error("Error fetching user:", error);
-            setUser({ role: "user" });
+            setUser({ role: USER_ROLES.USER });
           } else if (userData) {
             setUser(userData);
           } else {
-            setUser({ role: "user" });
+            setUser({ role: USER_ROLES.USER });
           }
         }
       } else {
@@ -111,7 +108,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   }
 
   // Check admin requirement
-  if (requireAdmin && user.role !== "admin") {
+  if (requireAdmin && user.role !== USER_ROLES.ADMIN) {
     return <Navigate to="/" replace />;
   }
 

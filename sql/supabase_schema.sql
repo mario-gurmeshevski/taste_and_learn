@@ -13,6 +13,7 @@ DROP TABLE IF EXISTS users CASCADE;
 CREATE TABLE users (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
+  discriminator TEXT NOT NULL DEFAULT LPAD((('x' || SUBSTRING(replace(id::text, '-', ''), GREATEST(LENGTH(replace(id::text, '-', '')) - 7, 1), 8))::bit(32)::bigint % 10000)::text, 4, '0'),
   role TEXT DEFAULT 'user' NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -208,6 +209,8 @@ CREATE POLICY "Only admins can update broadcast state"
 
 CREATE INDEX idx_users_created_at ON users(created_at);
 CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_discriminator ON users(discriminator);
+CREATE INDEX idx_users_name_discriminator ON users(name, discriminator);
 CREATE INDEX idx_answers_user_id ON answers(user_id);
 CREATE INDEX idx_answers_question_id ON answers(question_id);
 CREATE INDEX idx_answers_score ON answers(score DESC);

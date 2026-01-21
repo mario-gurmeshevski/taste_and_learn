@@ -6,15 +6,8 @@ import {
 } from "framer-motion";
 import { FaLock, FaSpinner } from "react-icons/fa";
 import supabase from "../lib/supabase";
-
-interface LeaderboardUser {
-  id: string;
-  name: string;
-  totalScore: number;
-  attemptsCount: number;
-  lastAttempt: string | null;
-  isCurrentUser?: boolean;
-}
+import type { LeaderboardUser } from "../config/types";
+import { DB_TABLES, USER_ROLES, DB_FIELDS, SORT_ORDER } from "../config/constants";
 
 const Leaderboard: React.FC = () => {
   const [topUsers, setTopUsers] = useState<LeaderboardUser[]>([]);
@@ -36,9 +29,9 @@ const Leaderboard: React.FC = () => {
         }
 
         const { data: userData, error: userError } = await supabase
-          .from("users")
+          .from(DB_TABLES.USERS)
           .select("*")
-          .eq("id", session.user.id)
+          .eq(DB_FIELDS.ID, session.user.id)
           .maybeSingle();
 
         if (userError) throw userError;
@@ -49,7 +42,7 @@ const Leaderboard: React.FC = () => {
           return;
         }
 
-        if (userData.role !== "admin") {
+        if (userData.role !== USER_ROLES.ADMIN) {
           setError("Access denied. Admin privileges required.");
           setIsAdmin(false);
           setLoading(false);
@@ -72,16 +65,16 @@ const Leaderboard: React.FC = () => {
     try {
       const { data: usersData, error: usersError } = await supabase
         .from("users")
-        .select("id, name");
+        .select("id, name, discriminator");
 
       if (usersError) throw usersError;
 
       const { data: sessionsData, error: sessionsError } =
         await supabase
-          .from("quiz_sessions")
-          .select("user_id, total_score, completed_at")
-          .not("completed_at", "is", null)
-          .order("total_score", { ascending: false });
+          .from(DB_TABLES.QUIZ_SESSIONS)
+          .select(`${DB_FIELDS.USER_ID}, ${DB_FIELDS.TOTAL_SCORE}, ${DB_FIELDS.COMPLETED_AT}`)
+          .not(DB_FIELDS.COMPLETED_AT, "is", null)
+          .order(DB_FIELDS.TOTAL_SCORE, { ascending: SORT_ORDER.DESCENDING });
 
       if (sessionsError) throw sessionsError;
 
@@ -127,6 +120,7 @@ const Leaderboard: React.FC = () => {
         .map((user) => ({
           id: user.id,
           name: user.name,
+          discriminator: user.discriminator,
           totalScore: userStatsMap[user.id].bestScore,
           attemptsCount: userStatsMap[user.id].attempts,
           lastAttempt: userStatsMap[user.id].lastAttempt,
@@ -286,6 +280,9 @@ const Leaderboard: React.FC = () => {
               <>
                 <div className="text-xl font-medium mb-2 text-neutral-900">
                   {topUsers[1].name}
+                  <span className="text-neutral-400 ml-2">
+                    #{topUsers[1].discriminator}
+                  </span>
                 </div>
                 <div className="text-sm text-neutral-600">
                   {topUsers[1].totalScore} points
@@ -330,6 +327,9 @@ const Leaderboard: React.FC = () => {
                   className="text-2xl font-medium mb-2 text-neutral-900"
                 >
                   {topUsers[0].name}
+                  <span className="text-neutral-400 ml-2">
+                    #{topUsers[0].discriminator}
+                  </span>
                 </motion.div>
                 <div className="text-base text-neutral-600">
                   {topUsers[0].totalScore} points
@@ -365,6 +365,9 @@ const Leaderboard: React.FC = () => {
               <>
                 <div className="text-xl font-medium mb-2 text-neutral-900">
                   {topUsers[2].name}
+                  <span className="text-neutral-400 ml-2">
+                    #{topUsers[2].discriminator}
+                  </span>
                 </div>
                 <div className="text-sm text-neutral-600">
                   {topUsers[2].totalScore} points
@@ -413,6 +416,9 @@ const Leaderboard: React.FC = () => {
                     <div>
                       <span className="text-sm font-medium text-neutral-900">
                         {user.name}
+                        <span className="text-neutral-400 ml-1">
+                          #{user.discriminator}
+                        </span>
                       </span>
                       <div className="text-xs text-neutral-400">
                         {user.attemptsCount} attempt

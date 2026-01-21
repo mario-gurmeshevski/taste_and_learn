@@ -3,6 +3,7 @@ import { Navigate, useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { FaSpinner } from "react-icons/fa";
 import supabase from "../lib/supabase";
+import { ROUTES } from "../config/constants";
 
 const NotFound: React.FC = () => {
   const navigate = useNavigate();
@@ -89,7 +90,7 @@ const NotFound: React.FC = () => {
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => navigate("/")}
+            onClick={() => navigate(ROUTES.HOME)}
             className="bg-neutral-900 text-white px-8 py-3 text-sm font-medium hover:bg-neutral-800 transition-colors duration-200"
           >
             Go to Home
