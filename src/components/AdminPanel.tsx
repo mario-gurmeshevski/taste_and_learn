@@ -6,21 +6,19 @@ import React, {
   useMemo,
 } from "react";
 import { motion } from "framer-motion";
+import {
+  FaPlay,
+  FaPause,
+  FaRedo,
+  FaBackward,
+  FaForward,
+  FaSpinner,
+} from "react-icons/fa";
 import supabase from "../lib/supabase";
 import videoFile from "../assets/video.mp4";
 import { Plyr } from "plyr-react";
 import "plyr-react/plyr.css";
-
-interface BroadcastState {
-  id: number;
-  current_position: number;
-  is_playing: boolean;
-  updated_at: string;
-}
-
-interface PlyrRef {
-  plyr: any;
-}
+import type { BroadcastState, PlyrRef } from "../types";
 
 const AdminPanel: React.FC = () => {
   const [broadcastState, setBroadcastState] =
@@ -32,6 +30,7 @@ const AdminPanel: React.FC = () => {
   const plyrRef = useRef<PlyrRef>(null);
   const isUpdating = useRef(false);
   const broadcastStateRef = useRef<BroadcastState | null>(null);
+  const broadcastChannelRef = useRef<any>(null);
 
   const videoSrc = useMemo(
     () => ({
@@ -79,7 +78,7 @@ const AdminPanel: React.FC = () => {
         .from("users")
         .select("*")
         .eq("id", session.user.id)
-        .single();
+        .maybeSingle();
 
       if (!userData || userData.role !== "admin") {
         window.location.href = "/";
@@ -111,20 +110,44 @@ const AdminPanel: React.FC = () => {
           updated_at: new Date().toISOString(),
         };
 
-        console.log("Updating broadcast state:", updateData);
-
         const { error } = await supabase
           .from("public_broadcast_state")
           .update(updateData)
           .eq("id", broadcastStateRef.current.id);
 
         if (!error) {
-          console.log("✅ Update successful");
           setBroadcastState((prev) =>
-            prev ? { ...prev, ...updates } : null,
+            prev
+              ? {
+                  ...prev,
+                  ...updates,
+                  updated_at: updateData.updated_at as string,
+                  updated_by: updateData.updated_by as string,
+                }
+              : null,
           );
+
+          // Send broadcast update to all subscribers
+          // Use updateData which includes the new updated_at timestamp
+          const updatedState = broadcastStateRef.current
+            ? { ...broadcastStateRef.current, ...updateData }
+            : (updateData as BroadcastState);
+
+          if (broadcastChannelRef.current) {
+            broadcastChannelRef.current
+              .send({
+                type: "broadcast",
+                event: "broadcast-state-update",
+                payload: updatedState,
+              })
+              .catch((err: any) =>
+                console.error("Broadcast error:", err),
+              );
+          } else {
+            console.warn("Broadcast channel not ready");
+          }
         } else {
-          console.error("❌ Update failed:", error);
+          console.error("Update failed:", error);
         }
       } finally {
         isUpdating.current = false;
@@ -133,14 +156,12 @@ const AdminPanel: React.FC = () => {
     [currentUser],
   );
 
-  // Optional: Periodic sync every 30 seconds during playback to prevent drift
   useEffect(() => {
     if (!isPlayerReady || !broadcastState?.is_playing) return;
 
     const syncInterval = setInterval(() => {
       if (plyrRef.current?.plyr) {
         const currentTime = plyrRef.current.plyr.currentTime;
-        console.log("Heartbeat sync:", currentTime);
         updateBroadcastState({ current_position: currentTime });
       }
     }, 30000);
@@ -181,7 +202,7 @@ const AdminPanel: React.FC = () => {
       const { data } = await supabase
         .from("public_broadcast_state")
         .select("*")
-        .single();
+        .maybeSingle();
 
       if (data && plyrRef.current?.plyr) {
         setBroadcastState(data);
@@ -201,6 +222,23 @@ const AdminPanel: React.FC = () => {
     };
 
     fetchBroadcastState();
+
+    // Set up broadcast channel for sending updates
+    const channel = supabase
+      .channel("broadcast-sync")
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          broadcastChannelRef.current = channel;
+        }
+      });
+
+    return () => {
+      // Clear the ref when channel is removed
+      broadcastChannelRef.current = null;
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
   }, [isPlayerReady, currentUser]);
 
   const handlePlay = async () => {
@@ -250,27 +288,14 @@ const AdminPanel: React.FC = () => {
   };
 
   const handleRestart = async () => {
+    if (plyrRef.current?.plyr) {
+      plyrRef.current.plyr.pause();
+    }
     await handleSeek(0);
     await updateBroadcastState({
       is_playing: false,
       current_position: 0,
     });
-  };
-
-  const handleStop = async () => {
-    if (!isPlayerReady || !plyrRef.current?.plyr) return;
-
-    try {
-      const currentTime = plyrRef.current.plyr.currentTime;
-      plyrRef.current.plyr.pause();
-
-      await updateBroadcastState({
-        is_playing: false,
-        current_position: currentTime,
-      });
-    } catch (error) {
-      console.error("Error in handleStop:", error);
-    }
   };
 
   const handleSkipForward = async () => {
@@ -309,18 +334,18 @@ const AdminPanel: React.FC = () => {
 
   return (
     <div className="pt-16 bg-black min-h-screen">
-      <div className="max-w-7xl mx-auto p-6">
+      <div className="max-w-7xl mx-auto p-3 sm:p-4 md:p-6">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="bg-neutral-900 border border-neutral-700 p-4 mb-4 rounded-lg"
+          className="bg-neutral-900 border border-neutral-700 p-3 sm:p-4 mb-3 sm:mb-4 rounded-lg"
         >
-          <h2 className="text-white text-xl font-bold mb-4">
+          <h2 className="text-white text-lg sm:text-xl font-bold mb-3 sm:mb-4">
             Admin Broadcast Controls
           </h2>
 
-          <div className="flex flex-wrap gap-2 mb-4">
+          <div className="flex flex-wrap gap-2 mb-3 sm:mb-4">
             <motion.button
               onClick={handlePlay}
               disabled={!isPlayerReady}
@@ -345,9 +370,9 @@ const AdminPanel: React.FC = () => {
                 isPlayerReady
                   ? "bg-green-500/30 border-green-400/30 shadow-lg shadow-green-500/20"
                   : "bg-gray-500/20 border-gray-500/20 cursor-not-allowed opacity-50"
-              } backdrop-blur-md text-white px-4 py-2 rounded-lg text-sm font-medium border`}
+              } backdrop-blur-md text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium border flex items-center gap-1 sm:gap-2`}
             >
-              ▶ Start/Play
+              <FaPlay className="text-sm" /> Start/Play
             </motion.button>
 
             <motion.button
@@ -374,38 +399,9 @@ const AdminPanel: React.FC = () => {
                 isPlayerReady
                   ? "bg-yellow-500/30 border-yellow-400/30 shadow-lg shadow-yellow-500/20"
                   : "bg-gray-500/20 border-gray-500/20 cursor-not-allowed opacity-50"
-              } backdrop-blur-md text-white px-4 py-2 rounded-lg text-sm font-medium border`}
+              } backdrop-blur-md text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium border flex items-center gap-1 sm:gap-2`}
             >
-              ⏸ Pause
-            </motion.button>
-
-            <motion.button
-              onClick={handleStop}
-              disabled={!isPlayerReady}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.2 }}
-              whileHover={
-                isPlayerReady
-                  ? {
-                      scale: 1.05,
-                      y: -2,
-                      transition: { duration: 0.2 },
-                    }
-                  : {}
-              }
-              whileTap={
-                isPlayerReady
-                  ? { scale: 0.95, transition: { duration: 0.1 } }
-                  : {}
-              }
-              className={`${
-                isPlayerReady
-                  ? "bg-red-500/30 border-red-400/30 shadow-lg shadow-red-500/20"
-                  : "bg-gray-500/20 border-gray-500/20 cursor-not-allowed opacity-50"
-              } backdrop-blur-md text-white px-4 py-2 rounded-lg text-sm font-medium border`}
-            >
-              ⏹ Stop
+              <FaPause className="text-sm" /> Pause
             </motion.button>
 
             <motion.button
@@ -432,9 +428,9 @@ const AdminPanel: React.FC = () => {
                 isPlayerReady
                   ? "bg-blue-500/30 border-blue-400/30 shadow-lg shadow-blue-500/20"
                   : "bg-gray-500/20 border-gray-500/20 cursor-not-allowed opacity-50"
-              } backdrop-blur-md text-white px-4 py-2 rounded-lg text-sm font-medium border`}
+              } backdrop-blur-md text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium border flex items-center gap-1 sm:gap-2`}
             >
-              ⏮ Restart
+              <FaRedo className="text-sm" /> Restart
             </motion.button>
 
             <motion.button
@@ -461,9 +457,9 @@ const AdminPanel: React.FC = () => {
                 isPlayerReady
                   ? "bg-neutral-400/20 border-neutral-400/20 shadow-lg shadow-neutral-500/10"
                   : "bg-gray-500/20 border-gray-500/20 cursor-not-allowed opacity-50"
-              } backdrop-blur-md text-white px-4 py-2 rounded-lg text-sm font-medium border`}
+              } backdrop-blur-md text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium border flex items-center gap-1 sm:gap-2`}
             >
-              ⏪ -10s
+              <FaBackward className="text-sm" /> -10s
             </motion.button>
 
             <motion.button
@@ -490,9 +486,9 @@ const AdminPanel: React.FC = () => {
                 isPlayerReady
                   ? "bg-neutral-400/20 border-neutral-400/20 shadow-lg shadow-neutral-500/10"
                   : "bg-gray-500/20 border-gray-500/20 cursor-not-allowed opacity-50"
-              } backdrop-blur-md text-white px-4 py-2 rounded-lg text-sm font-medium border`}
+              } backdrop-blur-md text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium border flex items-center gap-1 sm:gap-2`}
             >
-              ⏩ +10s
+              <FaForward className="text-sm" /> +10s
             </motion.button>
           </div>
 
@@ -500,18 +496,24 @@ const AdminPanel: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.4 }}
-            className="text-white text-sm"
+            className="text-white text-xs sm:text-sm"
           >
             <p>
-              Status:{" "}
-              <span className="font-bold">
-                {broadcastState?.is_playing
-                  ? "▶ Playing"
-                  : "⏸ Paused"}
+              Status:
+              <span className="font-bold flex items-center gap-2">
+                {broadcastState?.is_playing ? (
+                  <>
+                    <FaPlay /> Playing
+                  </>
+                ) : (
+                  <>
+                    <FaPause /> Paused
+                  </>
+                )}
               </span>
             </p>
             <p>
-              Current Time:{" "}
+              Current Time:
               <span className="font-bold">
                 {(broadcastState?.current_position ?? 0).toFixed(2)}s
               </span>
@@ -523,7 +525,7 @@ const AdminPanel: React.FC = () => {
           {!isPlayerReady && (
             <div className="w-full h-full flex items-center justify-center bg-black text-white">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto"></div>
+                <FaSpinner className="animate-spin h-12 w-12 mx-auto" />
                 <p className="mt-4">Loading video player...</p>
               </div>
             </div>
