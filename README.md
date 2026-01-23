@@ -124,7 +124,7 @@ src/
 │   └── Skeleton.tsx         # Loading skeleton component
 ├── lib/
 │   ├── supabase.ts          # Supabase client configuration
-│   └── discriminator.ts     # Type/Interface discrimination utilities
+│   └── discriminator.ts     # Type discrimination utilities
 └── assets/
     └── video.mp4            # Video content
 sql/
