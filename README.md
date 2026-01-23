@@ -17,6 +17,7 @@ An interactive video quiz application where users watch synchronized video conte
 
 - **Broadcast Controls**: Admin controls video playback (play/pause/seek) for all users
 - **Leaderboard Access**: View comprehensive user statistics and rankings
+  - **Admins**: See all users with full details (name, score, attempts)
 - **Question Management**: Access and manage quiz questions
 - **User Analytics**: Track user performance and quiz sessions
 
@@ -97,28 +98,39 @@ npm run lint         # Run ESLint
 npm run preview      # Preview production build locally
 ```
 
+### Deployment
+
+The app includes a `vercel.json` configuration file for easy deployment to Vercel. Simply connect your Git repository and deploy with default settings.
+
 ## Project Structure
 
 ```
 src/
+├── App.tsx                  # Main app with routing configuration
+├── main.tsx                 # Application entry point
+├── config/
+│   ├── types.ts             # TypeScript type definitions
+│   └── constants.ts         # Application constants
 ├── components/
-│   ├── App.tsx              # Main app with routing
-│   ├── Home.tsx             # Video player with synchronized quiz
-│   ├── Quiz.tsx             # Timed quiz component
-│   ├── Leaderboard.tsx      # Leaderboard display (admin-only)
-│   ├── LeaderboardPage.tsx  # Leaderboard page wrapper
-│   ├── AdminPanel.tsx       # Admin controls
-│   ├── Login.tsx            # Authentication (anonymous + admin)
-│   ├── Navbar.tsx           # Navigation bar
-│   ├── ProtectedRoute.tsx   # Auth guard component
-│   └── NotFound.tsx         # 404 page
+│   ├── Home.tsx             # Video player with synchronized quiz overlay
+│   ├── Quiz.tsx             # Timed quiz component (30-second countdown)
+│   ├── Leaderboard.tsx      # Leaderboard display with podium view
+│   ├── LeaderboardPage.tsx  # Leaderboard page wrapper with auth
+│   ├── AdminPanel.tsx       # Admin controls for broadcast & questions
+│   ├── Login.tsx            # Anonymous & admin authentication
+│   ├── Navbar.tsx           # Navigation bar with user info
+│   ├── ProtectedRoute.tsx   # Auth guard component for protected routes
+│   ├── NotFound.tsx         # 404 not found page
+│   └── Skeleton.tsx         # Loading skeleton component
 ├── lib/
-│   └── supabase.ts          # Supabase client config
+│   ├── supabase.ts          # Supabase client configuration
+│   └── discriminator.ts     # Type/Interface discrimination utilities
 └── assets/
     └── video.mp4            # Video content
 sql/
-├── supabase_schema.sql      # Database schema with RLS
-└── questions.sql            # Sample questions data
+├── supabase_schema.sql      # Database schema with RLS policies
+├── questions.sql            # Sample quiz questions data
+└── users.sql                # User management queries
 ```
 
 ## Authentication Flow
@@ -142,12 +154,6 @@ sql/
 - **Admin Routes**: `/admin`, `/leaderboard` (require admin role)
 - **Catch-All**: All undefined routes → 404 page (or login if unauthenticated)
 
-### Smart Redirects
-
-- Unauthenticated users accessing protected routes → `/login` (saves path)
-- After login → redirects to saved path or default route
-- Authenticated users accessing `/login` → redirects to `/`
-
 ## Database Schema
 
 ### Key Tables
@@ -163,10 +169,10 @@ sql/
 
 - `id` (BIGINT, auto-increment)
 - `question_text` (TEXT)
-- `options` (JSONB array of answer options)
-- `correct_answer_index` (INTEGER)
-- `start_timestamp` (INTEGER) - question appears at this video time
-- `end_timestamp` (INTEGER) - question disappears at this video time
+- `options` (JSONB array of answer options) - supports multi-language content
+- `correct_answer_index` (INTEGER) - 0-based index of correct answer
+- `start_timestamp` (INTEGER) - question appears at this video time (seconds)
+- `end_timestamp` (INTEGER) - question disappears at this video time (seconds)
 
 **answers**
 
@@ -224,11 +230,20 @@ INSERT INTO questions (
   'Your question text?',
   '["Option 1", "Option 2", "Option 3", "Option 4"]'::jsonb,
   0,  -- index of correct answer (0-based)
-  30, -- appear at 30 seconds
-  60  -- disappear at 60 seconds
+  30, -- appear at 30 seconds of the video
+  60  -- disappear at 60 seconds of the video
 );
 ```
 
+### Question Timing
+
+- Questions appear when `video.currentTime >= question.start_timestamp`
+- Questions disappear when `video.currentTime > question.end_timestamp`
+- Quiz overlay appears automatically based on video timestamps
+- 30-second timer starts when question becomes visible
+- Auto-submits when timer expires
+- Video seeking is blocked to prevent skipping unanswered questions
+
 ## License
 
-MIT
+This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
