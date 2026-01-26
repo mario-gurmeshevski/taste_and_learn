@@ -10,7 +10,7 @@
  */
 export function generateDiscriminator(userId: string): string {
   // Remove dashes and take last 8 characters
-  const cleanId = userId.replace(/-/g, '');
+  const cleanId = userId.replace(/-/g, "");
   const lastChars = cleanId.slice(-8);
 
   // Convert hex to decimal and get last 4 digits
@@ -31,7 +31,10 @@ export function generateDiscriminator(userId: string): string {
  * Generates a full display name with discriminator
  * Format: "UserName#1234"
  */
-export function generateDisplayName(userName: string, userId: string): string {
+export function generateDisplayName(
+  userName: string,
+  userId: string,
+): string {
   const discriminator = generateDiscriminator(userId);
   return `${userName}#${discriminator}`;
 }
