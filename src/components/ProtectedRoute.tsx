@@ -46,7 +46,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
           setUser({ role: USER_ROLES.USER });
         }
       } else {
-        setUser({ role: "user" });
+        setUser({ role: USER_ROLES.USER });
       }
 
       setLoading(false);

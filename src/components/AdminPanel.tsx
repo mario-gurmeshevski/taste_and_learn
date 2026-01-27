@@ -31,6 +31,23 @@ import {
   DB_FIELDS,
 } from "../config/constants";
 
+// Helper function to generate consistent animation props for buttons
+const getButtonAnimationProps = (delay: number, enabled: boolean = true) => ({
+  initial: { opacity: 0, scale: 0.8 },
+  animate: { opacity: 1, scale: 1 },
+  transition: { delay },
+  whileHover: enabled
+    ? {
+        scale: 1.05,
+        y: -2,
+        transition: { duration: 0.2 },
+      }
+    : {},
+  whileTap: enabled
+    ? { scale: 0.95, transition: { duration: 0.1 } }
+    : {},
+});
+
 const AdminPanel: React.FC = () => {
   const [broadcastState, setBroadcastState] =
     useState<BroadcastState | null>(null);
@@ -381,23 +398,7 @@ const AdminPanel: React.FC = () => {
             <motion.button
               onClick={handlePlay}
               disabled={!isPlayerReady}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.1 }}
-              whileHover={
-                isPlayerReady
-                  ? {
-                      scale: 1.05,
-                      y: -2,
-                      transition: { duration: 0.2 },
-                    }
-                  : {}
-              }
-              whileTap={
-                isPlayerReady
-                  ? { scale: 0.95, transition: { duration: 0.1 } }
-                  : {}
-              }
+              {...getButtonAnimationProps(0.1, isPlayerReady)}
               aria-label="Start or play broadcast"
               className={`${
                 isPlayerReady
@@ -412,23 +413,7 @@ const AdminPanel: React.FC = () => {
             <motion.button
               onClick={handlePause}
               disabled={!isPlayerReady}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.15 }}
-              whileHover={
-                isPlayerReady
-                  ? {
-                      scale: 1.05,
-                      y: -2,
-                      transition: { duration: 0.2 },
-                    }
-                  : {}
-              }
-              whileTap={
-                isPlayerReady
-                  ? { scale: 0.95, transition: { duration: 0.1 } }
-                  : {}
-              }
+              {...getButtonAnimationProps(0.15, isPlayerReady)}
               aria-label="Pause broadcast"
               className={`${
                 isPlayerReady
@@ -442,23 +427,7 @@ const AdminPanel: React.FC = () => {
             <motion.button
               onClick={handleRestart}
               disabled={!isPlayerReady}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.25 }}
-              whileHover={
-                isPlayerReady
-                  ? {
-                      scale: 1.05,
-                      y: -2,
-                      transition: { duration: 0.2 },
-                    }
-                  : {}
-              }
-              whileTap={
-                isPlayerReady
-                  ? { scale: 0.95, transition: { duration: 0.1 } }
-                  : {}
-              }
+              {...getButtonAnimationProps(0.25, isPlayerReady)}
               aria-label="Restart broadcast from beginning"
               className={`${
                 isPlayerReady
@@ -473,23 +442,7 @@ const AdminPanel: React.FC = () => {
             <motion.button
               onClick={handleSkipBackward}
               disabled={!isPlayerReady}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.3 }}
-              whileHover={
-                isPlayerReady
-                  ? {
-                      scale: 1.05,
-                      y: -2,
-                      transition: { duration: 0.2 },
-                    }
-                  : {}
-              }
-              whileTap={
-                isPlayerReady
-                  ? { scale: 0.95, transition: { duration: 0.1 } }
-                  : {}
-              }
+              {...getButtonAnimationProps(0.3, isPlayerReady)}
               aria-label={`Skip backward ${SKIP_AMOUNT} seconds`}
               className={`${
                 isPlayerReady
@@ -504,23 +457,7 @@ const AdminPanel: React.FC = () => {
             <motion.button
               onClick={handleSkipForward}
               disabled={!isPlayerReady}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.35 }}
-              whileHover={
-                isPlayerReady
-                  ? {
-                      scale: 1.05,
-                      y: -2,
-                      transition: { duration: 0.2 },
-                    }
-                  : {}
-              }
-              whileTap={
-                isPlayerReady
-                  ? { scale: 0.95, transition: { duration: 0.1 } }
-                  : {}
-              }
+              {...getButtonAnimationProps(0.35, isPlayerReady)}
               aria-label={`Skip forward ${SKIP_AMOUNT} seconds`}
               className={`${
                 isPlayerReady
@@ -534,18 +471,7 @@ const AdminPanel: React.FC = () => {
 
             <motion.button
               onClick={() => setShowQRModal(true)}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.4 }}
-              whileHover={{
-                scale: 1.05,
-                y: -2,
-                transition: { duration: 0.2 },
-              }}
-              whileTap={{
-                scale: 0.95,
-                transition: { duration: 0.1 },
-              }}
+              {...getButtonAnimationProps(0.4)}
               aria-label="Show quiz QR code"
               className="bg-purple-500/30 border-purple-400/30 shadow-lg shadow-purple-500/20 backdrop-blur-md text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium border flex items-center gap-1 sm:gap-2"
             >
