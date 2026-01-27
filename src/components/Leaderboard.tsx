@@ -12,6 +12,7 @@ import { DB_TABLES, USER_ROLES, DB_FIELDS, SORT_ORDER } from "../config/constant
 const Leaderboard: React.FC = () => {
   const [topUsers, setTopUsers] = useState<LeaderboardUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showAllContestants, setShowAllContestants] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -384,12 +385,145 @@ const Leaderboard: React.FC = () => {
         </motion.div>
       </div>
 
-      <AnimatePresence>
-        {topUsers.slice(3).length > 0 && (
+      {/* Fourth and Fifth place */}
+      <div className="grid grid-cols-2 gap-6 mb-8 max-w-2xl mx-auto">
+        {/* Fourth place */}
+        <motion.div
+          custom={3}
+          variants={podiumVariants}
+          initial="hidden"
+          animate="visible"
+          className="flex flex-col items-center"
+        >
+          <span className="text-xs uppercase tracking-wider text-neutral-500 mb-3">
+            Fourth
+          </span>
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
+            whileHover={{ scale: 1.02 }}
+            transition={{ type: "spring" as const, stiffness: 300 }}
+            className="w-full border border-neutral-200 bg-neutral-50 p-5 flex flex-col items-center justify-center"
+          >
+            {topUsers[3] ? (
+              <>
+                <div className="text-lg font-medium mb-1 text-neutral-900">
+                  {topUsers[3].name}
+                  <span className="text-neutral-400 ml-2 text-sm">
+                    #{topUsers[3].discriminator}
+                  </span>
+                </div>
+                <div className="text-sm text-neutral-600">
+                  {topUsers[3].totalScore} pts
+                </div>
+                <div className="text-xs text-neutral-400 mt-1">
+                  {topUsers[3].attemptsCount} attempt
+                  {topUsers[3].attemptsCount !== 1 ? "s" : ""}
+                </div>
+              </>
+            ) : (
+              <span className="text-neutral-400 text-sm">—</span>
+            )}
+          </motion.div>
+        </motion.div>
+
+        {/* Fifth place */}
+        <motion.div
+          custom={4}
+          variants={podiumVariants}
+          initial="hidden"
+          animate="visible"
+          className="flex flex-col items-center"
+        >
+          <span className="text-xs uppercase tracking-wider text-neutral-500 mb-3">
+            Fifth
+          </span>
+          <motion.div
+            whileHover={{ scale: 1.02 }}
+            transition={{ type: "spring" as const, stiffness: 300 }}
+            className="w-full border border-neutral-200 bg-neutral-50 p-5 flex flex-col items-center justify-center"
+          >
+            {topUsers[4] ? (
+              <>
+                <div className="text-lg font-medium mb-1 text-neutral-900">
+                  {topUsers[4].name}
+                  <span className="text-neutral-400 ml-2 text-sm">
+                    #{topUsers[4].discriminator}
+                  </span>
+                </div>
+                <div className="text-sm text-neutral-600">
+                  {topUsers[4].totalScore} pts
+                </div>
+                <div className="text-xs text-neutral-400 mt-1">
+                  {topUsers[4].attemptsCount} attempt
+                  {topUsers[4].attemptsCount !== 1 ? "s" : ""}
+                </div>
+              </>
+            ) : (
+              <span className="text-neutral-400 text-sm">—</span>
+            )}
+          </motion.div>
+        </motion.div>
+      </div>
+
+      {/* Show all contestants button */}
+      {topUsers.length > 5 && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7 }}
+          className="flex justify-center mb-6"
+        >
+          <motion.button
+            onClick={() => setShowAllContestants(!showAllContestants)}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="bg-neutral-900 hover:bg-neutral-800 text-white px-6 py-3 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg hover:shadow-xl flex items-center gap-2"
+          >
+            {showAllContestants ? (
+              <>
+                <span>Hide</span>
+                <svg
+                  className="w-4 h-4 transition-transform duration-200"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 15l7-7 7 7"
+                  />
+                </svg>
+              </>
+            ) : (
+              <>
+                <span>Show All Contestants</span>
+                <svg
+                  className="w-4 h-4 transition-transform duration-200"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </>
+            )}
+          </motion.button>
+        </motion.div>
+      )}
+
+      <AnimatePresence>
+        {showAllContestants && topUsers.slice(5).length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3 }}
             className="border-t border-neutral-200 pt-8"
           >
             <motion.div
@@ -398,7 +532,7 @@ const Leaderboard: React.FC = () => {
               animate="visible"
               className="space-y-3 max-w-md mx-auto"
             >
-              {topUsers.slice(3).map((user, index) => (
+              {topUsers.slice(5).map((user, index) => (
                 <motion.div
                   key={user.id}
                   variants={itemVariants}
@@ -410,8 +544,8 @@ const Leaderboard: React.FC = () => {
                   className="flex justify-between items-center py-3 border-b border-neutral-100 last:border-0"
                 >
                   <div className="flex items-center gap-4">
-                    <span className="text-sm w-6 text-neutral-500">
-                      {index + 4}
+                    <span className="text-sm w-8 text-neutral-500 font-medium">
+                      {index + 6}
                     </span>
                     <div>
                       <span className="text-sm font-medium text-neutral-900">
@@ -426,7 +560,7 @@ const Leaderboard: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                  <span className="text-sm text-neutral-600">
+                  <span className="text-sm text-neutral-600 font-medium">
                     {user.totalScore} pts
                   </span>
                 </motion.div>

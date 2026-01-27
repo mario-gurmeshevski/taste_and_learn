@@ -1,4 +1,9 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+} from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { FaCheck, FaTimes, FaPlay, FaPause } from "react-icons/fa";
@@ -390,8 +395,6 @@ const Quiz: React.FC = () => {
       const timeElapsed =
         (now - lastKnownStateRef.current.timestamp) / MS_TO_SECONDS;
 
-      // Sanity check: if timeElapsed is negative or too large, use the base position
-      // This can happen if there's a clock sync issue or timestamp parsing problem
       const safeTimeElapsed = Math.max(
         0,
         Math.min(timeElapsed, MAX_TIME_ELAPSED_CAP),
@@ -485,7 +488,7 @@ const Quiz: React.FC = () => {
             setHasSubmitted(false);
             setShowCorrectAnswer(false);
           }, QUESTION_CLEAR_DELAY);
-          return; // Don't clear immediately
+          return;
         }
       }
       if (!showCorrectAnswer) {
@@ -501,6 +504,43 @@ const Quiz: React.FC = () => {
     showCorrectAnswer,
   ]);
 
+  const saveQuizResults = useCallback(
+    async (allAnswers: AnswerRecord[]) => {
+      if (!userId || !sessionId) return;
+
+      try {
+        const answersWithUserId = allAnswers.map((answer) => ({
+          ...answer,
+          user_id: userId,
+        }));
+
+        const { error: answersError } = await supabase
+          .from(DB_TABLES.ANSWERS)
+          .insert(answersWithUserId);
+
+        if (answersError) throw answersError;
+
+        const totalScore = allAnswers.reduce(
+          (sum, answer) => sum + answer.score,
+          0,
+        );
+
+        const { error: sessionError } = await supabase
+          .from(DB_TABLES.QUIZ_SESSIONS)
+          .update({
+            [DB_FIELDS.COMPLETED_AT]: new Date().toISOString(),
+            total_score: totalScore,
+          })
+          .eq(DB_FIELDS.ID, sessionId);
+
+        if (sessionError) throw sessionError;
+      } catch (error) {
+        console.error("Error saving quiz results:", error);
+      }
+    },
+    [userId, sessionId],
+  );
+
   // Check quiz completion
   useEffect(() => {
     if (
@@ -511,7 +551,7 @@ const Quiz: React.FC = () => {
       setQuizCompleted(true);
       saveQuizResults(answersRef.current);
     }
-  }, [answers, questions.length, quizCompleted]);
+  }, [answers, questions.length, quizCompleted, saveQuizResults]);
 
   // Update time remaining every second when a question is active
   useEffect(() => {
@@ -527,21 +567,16 @@ const Quiz: React.FC = () => {
     );
     setTimeRemaining(remaining);
 
-    // Update every second
+    // Update every second using functional state update
     const interval = setInterval(() => {
-      const newRemaining = Math.max(
-        0,
-        currentQuestion.end_timestamp - videoPosition,
-      );
-      setTimeRemaining(newRemaining);
+      setTimeRemaining((prev) => {
+        const newRemaining = Math.max(0, prev - 1);
+        return newRemaining;
+      });
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [
-    currentQuestion?.id,
-    currentQuestion?.end_timestamp,
-    videoPosition,
-  ]);
+  }, [currentQuestion, videoPosition]);
 
   const handleAutoSubmit = (question: Question) => {
     const newAnswer: AnswerRecord = {
@@ -581,40 +616,6 @@ const Quiz: React.FC = () => {
     setAnswers((prev) => [...prev, newAnswer]);
     lastAnsweredRef.current.add(currentQuestion.id);
     setHasSubmitted(true);
-  };
-
-  const saveQuizResults = async (allAnswers: AnswerRecord[]) => {
-    if (!userId || !sessionId) return;
-
-    try {
-      const answersWithUserId = allAnswers.map((answer) => ({
-        ...answer,
-        user_id: userId,
-      }));
-
-      const { error: answersError } = await supabase
-        .from(DB_TABLES.ANSWERS)
-        .insert(answersWithUserId);
-
-      if (answersError) throw answersError;
-
-      const totalScore = allAnswers.reduce(
-        (sum, answer) => sum + answer.score,
-        0,
-      );
-
-      const { error: sessionError } = await supabase
-        .from(DB_TABLES.QUIZ_SESSIONS)
-        .update({
-          [DB_FIELDS.COMPLETED_AT]: new Date().toISOString(),
-          total_score: totalScore,
-        })
-        .eq(DB_FIELDS.ID, sessionId);
-
-      if (sessionError) throw sessionError;
-    } catch (error) {
-      console.error("Error saving quiz results:", error);
-    }
   };
 
   const getNextQuestion = () => {

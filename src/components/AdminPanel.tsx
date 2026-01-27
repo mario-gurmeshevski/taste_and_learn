@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
+import { RealtimeChannel } from "@supabase/supabase-js";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaPlay,
@@ -59,7 +60,7 @@ const AdminPanel: React.FC = () => {
   const plyrRef = useRef<PlyrRef>(null);
   const isUpdating = useRef(false);
   const broadcastStateRef = useRef<BroadcastState | null>(null);
-  const broadcastChannelRef = useRef<any>(null);
+  const broadcastChannelRef = useRef<RealtimeChannel | null>(null);
 
   const videoSrc = useMemo(
     () => ({
@@ -169,7 +170,7 @@ const AdminPanel: React.FC = () => {
                 event: "broadcast-state-update",
                 payload: updatedState,
               })
-              .catch((err: any) =>
+              .catch((err: unknown) =>
                 console.error("Broadcast error:", err),
               );
           } else {
@@ -242,7 +243,10 @@ const AdminPanel: React.FC = () => {
           }
 
           if (data.is_playing) {
-            plyrRef.current?.plyr.play().catch(console.error);
+            const playPromise = plyrRef.current?.plyr.play();
+            if (playPromise instanceof Promise) {
+              playPromise.catch(console.error);
+            }
           } else {
             plyrRef.current?.plyr.pause();
           }
@@ -282,7 +286,10 @@ const AdminPanel: React.FC = () => {
       });
 
       setTimeout(() => {
-        plyrRef.current?.plyr.play().catch(console.error);
+        const playPromise = plyrRef.current?.plyr.play();
+        if (playPromise instanceof Promise) {
+          playPromise.catch(console.error);
+        }
       }, 100);
 
       toast.success("Broadcast started", { icon: "▶️" });

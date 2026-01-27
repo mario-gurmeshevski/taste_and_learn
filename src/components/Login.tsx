@@ -67,7 +67,10 @@ const Login: React.FC = () => {
         await supabase.auth.signInAnonymously();
       if (authError) throw authError;
 
-      const newUserId = authData.user?.id!;
+      if (!authData.user?.id) {
+        throw new Error("No user ID returned from anonymous sign-in");
+      }
+      const newUserId = authData.user.id;
 
       if (authData.session?.access_token) {
         supabase.realtime.setAuth(authData.session.access_token);
