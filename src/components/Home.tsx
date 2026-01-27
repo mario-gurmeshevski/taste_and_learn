@@ -4,7 +4,9 @@ import React, {
   useEffect,
   lazy,
   Suspense,
+  useMemo,
 } from "react";
+import { RealtimeChannel } from "@supabase/supabase-js";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaLock,
@@ -40,11 +42,6 @@ const Home: React.FC = () => {
   const [isLocallyPaused, setIsLocallyPaused] = useState(false);
   const [isPlayerReady, setIsPlayerReady] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
-  const [lastKnownState, setLastKnownState] = useState<{
-    position: number;
-    timestamp: number;
-    isPlaying: boolean;
-  } | null>(null);
 
   const plyrRef = useRef<PlyrRef>(null);
   const isUpdatingFromBroadcast = useRef(false);
@@ -111,15 +108,15 @@ const Home: React.FC = () => {
     broadcastStateRef.current = broadcastState;
   }, [broadcastState]);
 
-  // Update lastKnownState when broadcast state changes
-  useEffect(() => {
-    if (broadcastState) {
-      setLastKnownState({
-        position: broadcastState.current_position,
-        timestamp: new Date(broadcastState.updated_at).getTime(),
-        isPlaying: broadcastState.is_playing,
-      });
+  const lastKnownState = useMemo(() => {
+    if (!broadcastState) {
+      return null;
     }
+    return {
+      position: broadcastState.current_position,
+      timestamp: new Date(broadcastState.updated_at).getTime(),
+      isPlaying: broadcastState.is_playing,
+    };
   }, [broadcastState]);
 
   useEffect(() => {
@@ -183,7 +180,10 @@ const Home: React.FC = () => {
 
       // Sync play/pause state
       if (lastKnownState.isPlaying && player.paused) {
-        player.play().catch(console.error);
+        const playPromise = player.play();
+        if (playPromise instanceof Promise) {
+          playPromise.catch(console.error);
+        }
       } else if (!lastKnownState.isPlaying && !player.paused) {
         player.pause();
       }
@@ -196,7 +196,7 @@ const Home: React.FC = () => {
   useEffect(() => {
     if (!isPlayerReady) return;
 
-    let channel: any;
+    let channel: RealtimeChannel | null = null;
     let broadcastSubscribed = false;
     let fallbackTimeoutId: ReturnType<typeof setTimeout> | null =
       null;
@@ -214,7 +214,10 @@ const Home: React.FC = () => {
 
         if (data.is_playing) {
           setTimeout(() => {
-            plyrRef.current?.plyr.play().catch(console.error);
+            const playPromise = plyrRef.current?.plyr.play();
+            if (playPromise instanceof Promise) {
+              playPromise.catch(console.error);
+            }
           }, 100);
         }
       }
@@ -309,7 +312,10 @@ const Home: React.FC = () => {
 
       if (lastKnownState.isPlaying) {
         setTimeout(() => {
-          plyrRef.current?.plyr.play().catch(console.error);
+          const playPromise = plyrRef.current?.plyr.play();
+          if (playPromise instanceof Promise) {
+            playPromise.catch(console.error);
+          }
         }, 100);
       }
     }

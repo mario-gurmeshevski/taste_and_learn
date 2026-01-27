@@ -1,4 +1,5 @@
 import type { UserRole } from "./constants";
+import type { APITypes } from "plyr-react";
 
 // DATABASE TYPES
 
@@ -98,14 +99,7 @@ export interface AnswerRecord {
   score: number;
 }
 
-/**
- * Plyr instance reference
- * Using 'any' to match Plyr's actual API which has many properties
- */
-
-export interface PlyrRef {
-  plyr: any; // Plyr instance with full API (seeking, currentTime, etc.)
-}
+export type PlyrRef = APITypes;
 
 // LEADERBOARD TYPES
 
