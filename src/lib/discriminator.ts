@@ -38,20 +38,3 @@ export function generateDisplayName(
   const discriminator = generateDiscriminator(userId);
   return `${userName}#${discriminator}`;
 }
-
-/**
- * Extracts the base name from a display name
- * Returns the part before the # symbol
- */
-export function extractBaseName(displayName: string): string {
-  const parts = displayName.split("#");
-  return parts[0];
-}
-
-/**
- * Validates if a display name has the correct format
- */
-export function isValidDisplayName(displayName: string): boolean {
-  const regex = /^.{1,50}#\d{4}$/;
-  return regex.test(displayName);
-}

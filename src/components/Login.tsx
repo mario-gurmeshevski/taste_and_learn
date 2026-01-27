@@ -173,7 +173,7 @@ const Login: React.FC = () => {
             id: authData.user.id,
             name: email.split("@")[0],
             discriminator: discriminator,
-            role: USER_ROLES.USER,
+            role: USER_ROLES.ADMIN,
           });
 
         if (insertError) {

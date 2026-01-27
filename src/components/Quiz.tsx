@@ -25,6 +25,58 @@ import {
   ANSWER_LABELS,
 } from "../config/constants";
 
+// Helper function to determine button styles based on state
+interface ButtonStyles {
+  buttonClass: string;
+  letterBgClass: string;
+  letterTextClass: string;
+}
+
+function getAnswerButtonStyles(
+  showResult: boolean,
+  isCorrect: boolean,
+  isSelected: boolean,
+): ButtonStyles {
+  if (showResult) {
+    if (isCorrect) {
+      return {
+        buttonClass:
+          "bg-green-50 shadow-xl border-2 border-green-500",
+        letterBgClass: "bg-green-500",
+        letterTextClass: "text-white",
+      };
+    } else if (isSelected) {
+      return {
+        buttonClass:
+          "bg-red-50 shadow-xl border-2 border-red-500 opacity-60",
+        letterBgClass: "bg-red-500",
+        letterTextClass: "text-white",
+      };
+    } else {
+      return {
+        buttonClass:
+          "bg-white shadow-md border-2 border-gray-200 opacity-40",
+        letterBgClass: "bg-gray-200",
+        letterTextClass: "text-gray-500",
+      };
+    }
+  } else if (isSelected) {
+    return {
+      buttonClass:
+        "bg-white shadow-2xl scale-105 border-2 border-gray-900",
+      letterBgClass: "bg-gray-900",
+      letterTextClass: "text-white",
+    };
+  } else {
+    return {
+      buttonClass:
+        "bg-white shadow-md hover:shadow-xl border-2 border-gray-200 hover:border-gray-300",
+      letterBgClass: "bg-gray-100",
+      letterTextClass: "text-gray-700",
+    };
+  }
+}
+
 const Quiz: React.FC = () => {
   const navigate = useNavigate();
   const [selectedOption, setSelectedOption] = useState<number | null>(
@@ -36,7 +88,8 @@ const Quiz: React.FC = () => {
   const [showCorrectAnswer, setShowCorrectAnswer] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [userName, setUserName] = useState<string>("");
-  const [userDiscriminator, setUserDiscriminator] = useState<string>("");
+  const [userDiscriminator, setUserDiscriminator] =
+    useState<string>("");
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
@@ -107,7 +160,9 @@ const Quiz: React.FC = () => {
           await supabase
             .from(DB_TABLES.QUESTIONS)
             .select("*")
-            .order(DB_FIELDS.START_TIMESTAMP, { ascending: SORT_ORDER.ASCENDING });
+            .order(DB_FIELDS.START_TIMESTAMP, {
+              ascending: SORT_ORDER.ASCENDING,
+            });
 
         if (questionsError) throw questionsError;
 
@@ -225,7 +280,7 @@ const Quiz: React.FC = () => {
           });
         }
 
-        // START: When subscription starts, start a 10-second timer
+        // When subscription starts, start a 10-second timer
         subscriptionTimer = setTimeout(() => {
           // Only start polling if we haven't successfully subscribed yet
           if (!hasSuccessfullySubscribedRef.current) {
@@ -251,7 +306,7 @@ const Quiz: React.FC = () => {
           )
           .subscribe((status) => {
             if (status === "SUBSCRIBED") {
-              // STOP: Subscription succeeded - stop the timer and polling
+              // Subscription succeeded - stop the timer and polling
               hasSuccessfullySubscribedRef.current = true; // Set guard to prevent timeout from triggering
               if (subscriptionTimer) {
                 clearTimeout(subscriptionTimer);
@@ -466,17 +521,27 @@ const Quiz: React.FC = () => {
     }
 
     // Calculate initial time remaining
-    const remaining = Math.max(0, currentQuestion.end_timestamp - videoPosition);
+    const remaining = Math.max(
+      0,
+      currentQuestion.end_timestamp - videoPosition,
+    );
     setTimeRemaining(remaining);
 
     // Update every second
     const interval = setInterval(() => {
-      const newRemaining = Math.max(0, currentQuestion.end_timestamp - videoPosition);
+      const newRemaining = Math.max(
+        0,
+        currentQuestion.end_timestamp - videoPosition,
+      );
       setTimeRemaining(newRemaining);
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [currentQuestion?.id, currentQuestion?.end_timestamp, videoPosition]);
+  }, [
+    currentQuestion?.id,
+    currentQuestion?.end_timestamp,
+    videoPosition,
+  ]);
 
   const handleAutoSubmit = (question: Question) => {
     const newAnswer: AnswerRecord = {
@@ -613,7 +678,10 @@ const Quiz: React.FC = () => {
             of {questions.length} correct
           </div>
           <p className="text-neutral-700 mb-8">
-            Well done, <span className="font-medium">{userName}#{userDiscriminator}</span>
+            Well done,{" "}
+            <span className="font-medium">
+              {userName}#{userDiscriminator}
+            </span>
             !
           </p>
         </motion.div>
@@ -711,48 +779,17 @@ const Quiz: React.FC = () => {
                     const isSelected = selectedOption === index;
                     const isCorrect =
                       index === currentQuestion.correct_answer_index;
-                    const showResult = showCorrectAnswer;
-                    const wasCorrect = isSelected && isCorrect;
 
-                    // Determine button style based on state
-                    let buttonClass = "";
-                    let letterBgClass = "";
-                    let letterTextClass = "";
-
-                    if (showResult) {
-                      // Show correct answer mode
-                      if (isCorrect) {
-                        // Correct answer
-                        buttonClass =
-                          "bg-green-50 shadow-xl border-2 border-green-500";
-                        letterBgClass = "bg-green-500";
-                        letterTextClass = "text-white";
-                      } else if (isSelected && !wasCorrect) {
-                        // Wrong answer selected
-                        buttonClass =
-                          "bg-red-50 shadow-xl border-2 border-red-500 opacity-60";
-                        letterBgClass = "bg-red-500";
-                        letterTextClass = "text-white";
-                      } else {
-                        // Not selected, not correct
-                        buttonClass =
-                          "bg-white shadow-md border-2 border-gray-200 opacity-40";
-                        letterBgClass = "bg-gray-200";
-                        letterTextClass = "text-gray-500";
-                      }
-                    } else if (isSelected) {
-                      // Normal selection mode
-                      buttonClass =
-                        "bg-white shadow-2xl scale-105 border-2 border-gray-900";
-                      letterBgClass = "bg-gray-900";
-                      letterTextClass = "text-white";
-                    } else {
-                      // Normal unselected
-                      buttonClass =
-                        "bg-white shadow-md hover:shadow-xl border-2 border-gray-200 hover:border-gray-300";
-                      letterBgClass = "bg-gray-100";
-                      letterTextClass = "text-gray-700";
-                    }
+                    // Get button styles using helper function
+                    const {
+                      buttonClass,
+                      letterBgClass,
+                      letterTextClass,
+                    } = getAnswerButtonStyles(
+                      showCorrectAnswer,
+                      isCorrect,
+                      isSelected,
+                    );
 
                     return (
                       <motion.button
@@ -795,7 +832,7 @@ const Quiz: React.FC = () => {
                         </div>
 
                         {/* Result indicator */}
-                        {showResult && isCorrect && (
+                        {showCorrectAnswer && isCorrect && (
                           <div
                             className="absolute top-4 right-4 text-green-500"
                             aria-label="Correct answer"
@@ -806,17 +843,19 @@ const Quiz: React.FC = () => {
                             />
                           </div>
                         )}
-                        {showResult && isSelected && !wasCorrect && (
-                          <div
-                            className="absolute top-4 right-4 text-red-500"
-                            aria-label="Incorrect answer"
-                          >
-                            <FaTimes
-                              className="w-8 h-8"
-                              aria-hidden="true"
-                            />
-                          </div>
-                        )}
+                        {showCorrectAnswer &&
+                          isSelected &&
+                          !isCorrect && (
+                            <div
+                              className="absolute top-4 right-4 text-red-500"
+                              aria-label="Incorrect answer"
+                            >
+                              <FaTimes
+                                className="w-8 h-8"
+                                aria-hidden="true"
+                              />
+                            </div>
+                          )}
                       </motion.button>
                     );
                   })}
