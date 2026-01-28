@@ -4,6 +4,7 @@ import { FaSpinner } from "react-icons/fa";
 import supabase from "../lib/supabase";
 import type { ProtectedRouteProps, BasicUser } from "../config/types";
 import { DB_TABLES, USER_ROLES, DB_FIELDS } from "../config/constants";
+import type { Session } from "@supabase/supabase-js";
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   children,
@@ -16,40 +17,58 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   useEffect(() => {
     const checkAuth = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      try {
+        // Add timeout to prevent infinite loading on mobile
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Auth check timeout")), 5000)
+        );
 
-      if (!session) {
-        setHasSession(false);
-        setLoading(false);
-        return;
-      }
+        const sessionPromise = supabase.auth.getSession();
 
-      setHasSession(true);
+        const result = await Promise.race([
+          sessionPromise,
+          timeoutPromise,
+        ]) as { data: { session: Session | null } };
 
-      const isAnonUser = session.user.is_anonymous || false;
+        const session = result.data.session;
 
-      if (!isAnonUser) {
-        const { data: userData, error } = await supabase
-          .from(DB_TABLES.USERS)
-          .select("*")
-          .eq(DB_FIELDS.ID, session.user.id)
-          .maybeSingle();
+        if (!session) {
+          setHasSession(false);
+          setLoading(false);
+          return;
+        }
 
-        if (error) {
-          console.error("Error fetching user:", error);
-          setUser({ role: USER_ROLES.USER });
-        } else if (userData) {
-          setUser(userData);
+        setHasSession(true);
+
+        const isAnonUser = session.user.is_anonymous || false;
+
+        if (!isAnonUser) {
+          const { data: userData, error } = await supabase
+            .from(DB_TABLES.USERS)
+            .select("*")
+            .eq(DB_FIELDS.ID, session.user.id)
+            .maybeSingle();
+
+          if (error) {
+            console.error("Error fetching user:", error);
+            setUser({ role: USER_ROLES.USER });
+          } else if (userData) {
+            setUser(userData);
+          } else {
+            setUser({ role: USER_ROLES.USER });
+          }
         } else {
           setUser({ role: USER_ROLES.USER });
         }
-      } else {
-        setUser({ role: USER_ROLES.USER });
-      }
 
-      setLoading(false);
+        setLoading(false);
+      } catch (error) {
+        // Fail gracefully - treat as no session
+        console.error("Auth check failed:", error);
+        setHasSession(false);
+        setUser(null);
+        setLoading(false);
+      }
     };
 
     checkAuth();
