@@ -16,7 +16,6 @@ import {
 } from "react-icons/fa";
 import toast from "react-hot-toast";
 import supabase from "../lib/supabase";
-import videoFile from "../assets/video.mp4";
 import "plyr-react/plyr.css";
 import type { BroadcastState, PlyrRef, User } from "../config/types";
 import { VideoPlayerSkeleton } from "./Skeleton";
@@ -364,7 +363,7 @@ const Home: React.FC = () => {
 
   const videoSrc = {
     type: "video" as const,
-    sources: [{ src: videoFile, type: "video/mp4" }],
+    sources: [{ src: import.meta.env.VITE_VIDEO_URL, type: "video/mp4" }],
   };
 
   return (

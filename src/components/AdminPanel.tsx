@@ -19,7 +19,6 @@ import {
 import toast from "react-hot-toast";
 import { QRCodeSVG } from "qrcode.react";
 import supabase from "../lib/supabase";
-import videoFile from "../assets/video.mp4";
 import { Plyr } from "plyr-react";
 import "plyr-react/plyr.css";
 import type { BroadcastState, PlyrRef, User } from "../config/types";
@@ -65,7 +64,7 @@ const AdminPanel: React.FC = () => {
   const videoSrc = useMemo(
     () => ({
       type: "video" as const,
-      sources: [{ src: videoFile, type: "video/mp4" }],
+      sources: [{ src: import.meta.env.VITE_VIDEO_URL, type: "video/mp4" }],
     }),
     [],
   );
