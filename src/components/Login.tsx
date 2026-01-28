@@ -11,6 +11,7 @@ import {
   DB_FIELDS,
 } from "../config/constants";
 import { generateDiscriminator } from "../lib/discriminator";
+import type { Session } from "@supabase/supabase-js";
 
 const Login: React.FC = () => {
   const [isAdminLogin, setIsAdminLogin] = useState(false);
@@ -26,14 +27,31 @@ const Login: React.FC = () => {
   // Check if user is already authenticated
   useEffect(() => {
     const checkAuth = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      try {
+        // Add timeout to prevent infinite loading on mobile
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Auth check timeout")), 5000)
+        );
 
-      if (session) {
-        setIsAuthenticated(true);
+        const sessionPromise = supabase.auth.getSession();
+
+        const result = await Promise.race([
+          sessionPromise,
+          timeoutPromise,
+        ]) as { data: { session: Session | null } };
+
+        const session = result.data.session;
+
+        if (session) {
+          setIsAuthenticated(true);
+        }
+        setCheckingAuth(false);
+      } catch (error) {
+        // Fail gracefully - treat as not authenticated
+        console.error("Auth check failed:", error);
+        setIsAuthenticated(false);
+        setCheckingAuth(false);
       }
-      setCheckingAuth(false);
     };
 
     checkAuth();
