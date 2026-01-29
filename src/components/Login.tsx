@@ -1,63 +1,38 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, Navigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { FaSpinner } from "react-icons/fa";
-import toast from "react-hot-toast";
-import supabase from "../lib/supabase";
-import {
-  DB_TABLES,
-  USER_ROLES,
-  ROUTES,
-  DB_FIELDS,
-} from "../config/constants";
-import { generateDiscriminator } from "../lib/discriminator";
-import type { Session } from "@supabase/supabase-js";
+import { useAuth } from "../contexts/AuthContext";
+import { sanitizeText } from "../lib/sanitize";
 
 const Login: React.FC = () => {
+  const { isAuthenticated, checkingAuth, loading, signInAnonymously, signInWithPassword } = useAuth();
   const [isAdminLogin, setIsAdminLogin] = useState(false);
   const [userName, setUserName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [checkingAuth, setCheckingAuth] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const navigate = useNavigate();
+  const hasRedirectedRef = React.useRef(false);
 
-  // Check if user is already authenticated
+  // Handle redirect when authenticated
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        // Add timeout to prevent infinite loading on mobile
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Auth check timeout")), 5000)
-        );
+    if (isAuthenticated && !checkingAuth && !hasRedirectedRef.current) {
+      hasRedirectedRef.current = true;
 
-        const sessionPromise = supabase.auth.getSession();
+      // Check if there's a saved redirect path
+      const redirectPath = localStorage.getItem("redirectPath");
 
-        const result = await Promise.race([
-          sessionPromise,
-          timeoutPromise,
-        ]) as { data: { session: Session | null } };
-
-        const session = result.data.session;
-
-        if (session) {
-          setIsAuthenticated(true);
-        }
-        setCheckingAuth(false);
-      } catch (error) {
-        // Fail gracefully - treat as not authenticated
-        console.error("Auth check failed:", error);
-        setIsAuthenticated(false);
-        setCheckingAuth(false);
+      if (redirectPath && redirectPath !== "/login") {
+        localStorage.removeItem("redirectPath");
+        navigate(redirectPath, { replace: true });
+      } else {
+        navigate("/quiz", { replace: true });
       }
-    };
+    }
+  }, [isAuthenticated, checkingAuth, navigate]);
 
-    checkAuth();
-  }, []);
-
-  // Redirect if already authenticated
+  // Show loading while checking auth
   if (checkingAuth) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-neutral-50">
@@ -69,169 +44,42 @@ const Login: React.FC = () => {
     );
   }
 
+  // Don't render login form if authenticated
   if (isAuthenticated) {
-    return <Navigate to="/" replace />;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-neutral-50">
+        <div className="text-center">
+          <FaSpinner className="w-12 h-12 animate-spin mx-auto text-neutral-900" />
+          <p className="mt-4 text-neutral-600">Redirecting...</p>
+        </div>
+      </div>
+    );
   }
 
   const handleAnonymousLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userName.trim()) return;
 
-    setLoading(true);
     setError("");
 
     try {
-      const { data: authData, error: authError } =
-        await supabase.auth.signInAnonymously();
-      if (authError) throw authError;
-
-      if (!authData.user?.id) {
-        throw new Error("No user ID returned from anonymous sign-in");
-      }
-      const newUserId = authData.user.id;
-
-      if (authData.session?.access_token) {
-        supabase.realtime.setAuth(authData.session.access_token);
-      }
-
-      const discriminator = generateDiscriminator(newUserId);
-
-      const { error: insertError } = await supabase
-        .from(DB_TABLES.USERS)
-        .upsert({
-          id: newUserId,
-          name: userName,
-          discriminator: discriminator,
-          role: USER_ROLES.USER,
-        });
-
-      if (insertError) throw insertError;
-
-      const displayName = `${userName}#${discriminator}`;
-      toast.success(`Welcome, ${displayName}!`);
-
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      // Check if there's a saved redirect path
-      const redirectPath = localStorage.getItem("redirectPath");
-      if (redirectPath && redirectPath !== "/login") {
-        localStorage.removeItem("redirectPath");
-        navigate(redirectPath);
-      } else {
-        navigate(ROUTES.QUIZ);
-      }
-    } catch (err) {
+      await signInAnonymously(userName);
+      // Navigation will be handled by useEffect
+    } catch {
       const errorMsg = "Error creating account. Please try again.";
-      setError(errorMsg);
-      toast.error(errorMsg);
-      console.error("Anonymous login error:", err);
-    } finally {
-      setLoading(false);
+      setError(sanitizeText(errorMsg));
     }
   };
 
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError("");
 
     try {
-      await supabase.auth.signOut();
-
-      const { data: authData, error: authError } =
-        await supabase.auth.signInWithPassword({
-          email: email,
-          password: password,
-        });
-
-      if (authError) {
-        if (authError.message.includes("Invalid login credentials")) {
-          setError("Invalid email or password.");
-        } else if (
-          authError.message.includes("Email not confirmed")
-        ) {
-          setError(
-            "Please confirm your email address before logging in.",
-          );
-        } else {
-          setError(
-            "An error occurred during login. Please try again.",
-          );
-        }
-
-        const { data: anonData } =
-          await supabase.auth.signInAnonymously();
-        if (anonData.session?.access_token) {
-          supabase.realtime.setAuth(anonData.session.access_token);
-        }
-        return;
-      }
-
-      if (authData.session?.access_token) {
-        supabase.realtime.setAuth(authData.session.access_token);
-      }
-
-      toast.success("Admin login successful!");
-
-      const { data: userData, error: userError } = await supabase
-        .from(DB_TABLES.USERS)
-        .select("*")
-        .eq(DB_FIELDS.ID, authData.user.id)
-        .maybeSingle();
-
-      if (userError) {
-        setError(
-          "Unable to load user profile. Please contact admin.",
-        );
-        return;
-      }
-
-      if (!userData) {
-        const discriminator = generateDiscriminator(authData.user.id);
-        const { error: insertError } = await supabase
-          .from(DB_TABLES.USERS)
-          .upsert({
-            id: authData.user.id,
-            name: email.split("@")[0],
-            discriminator: discriminator,
-            role: USER_ROLES.ADMIN,
-          });
-
-        if (insertError) {
-          setError("Unable to create user profile.");
-          return;
-        }
-
-        // Check if there's a saved redirect path
-        const redirectPath = localStorage.getItem("redirectPath");
-        if (redirectPath && redirectPath !== "/login") {
-          localStorage.removeItem("redirectPath");
-          navigate(redirectPath);
-        } else {
-          navigate(ROUTES.HOME);
-        }
-        return;
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      // Check if there's a saved redirect path
-      const redirectPath = localStorage.getItem("redirectPath");
-      if (redirectPath && redirectPath !== "/login") {
-        localStorage.removeItem("redirectPath");
-        navigate(redirectPath);
-      } else {
-        if (userData.role === USER_ROLES.ADMIN) {
-          navigate(ROUTES.ADMIN);
-        } else {
-          navigate(ROUTES.HOME);
-        }
-      }
+      await signInWithPassword(email, password);
+      // Navigation will be handled by useEffect
     } catch (err) {
-      setError("An unexpected error occurred. Please try again.");
-      console.error("Login error:", err);
-    } finally {
-      setLoading(false);
+      setError(sanitizeText(err instanceof Error ? err.message : "An unexpected error occurred. Please try again."));
     }
   };
 

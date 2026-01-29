@@ -6,6 +6,7 @@ import {
 } from "framer-motion";
 import { FaLock, FaSpinner } from "react-icons/fa";
 import supabase from "../lib/supabase";
+import { sanitizeText } from "../lib/sanitize";
 import type { LeaderboardUser } from "../config/types";
 import { DB_TABLES, USER_ROLES, DB_FIELDS, SORT_ORDER } from "../config/constants";
 
@@ -17,49 +18,48 @@ const Leaderboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const initLeaderboard = async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
         if (!session?.user) {
           setError("Please log in to view the leaderboard");
           setLoading(false);
           return;
         }
 
-        const { data: userData, error: userError } = await supabase
-          .from(DB_TABLES.USERS)
-          .select("*")
-          .eq(DB_FIELDS.ID, session.user.id)
-          .maybeSingle();
+        try {
+          const { data: userData, error: userError } = await supabase
+            .from(DB_TABLES.USERS)
+            .select("*")
+            .eq(DB_FIELDS.ID, session.user.id)
+            .maybeSingle();
 
-        if (userError) throw userError;
+          if (userError) throw userError;
 
-        if (!userData) {
-          setError("User not found");
+          if (!userData) {
+            setError("User not found");
+            setLoading(false);
+            return;
+          }
+
+          if (userData.role !== USER_ROLES.ADMIN) {
+            setError("Access denied. Admin privileges required.");
+            setIsAdmin(false);
+            setLoading(false);
+            return;
+          }
+
+          setIsAdmin(true);
+          await fetchLeaderboard(userData.id);
+        } catch {
+          setError("Failed to load leaderboard");
           setLoading(false);
-          return;
         }
+      },
+    );
 
-        if (userData.role !== USER_ROLES.ADMIN) {
-          setError("Access denied. Admin privileges required.");
-          setIsAdmin(false);
-          setLoading(false);
-          return;
-        }
-
-        setIsAdmin(true);
-        await fetchLeaderboard(userData.id);
-      } catch (err) {
-        console.error("Error initializing leaderboard:", err);
-        setError("Failed to load leaderboard");
-        setLoading(false);
-      }
+    return () => {
+      authListener.subscription.unsubscribe();
     };
-
-    initLeaderboard();
   }, []);
 
   const fetchLeaderboard = async (currentUserId: string) => {
@@ -120,8 +120,8 @@ const Leaderboard: React.FC = () => {
         .filter((user) => userStatsMap[user.id])
         .map((user) => ({
           id: user.id,
-          name: user.name,
-          discriminator: user.discriminator,
+          name: sanitizeText(user.name),
+          discriminator: sanitizeText(user.discriminator),
           totalScore: userStatsMap[user.id].bestScore,
           attemptsCount: userStatsMap[user.id].attempts,
           lastAttempt: userStatsMap[user.id].lastAttempt,
@@ -136,8 +136,7 @@ const Leaderboard: React.FC = () => {
       });
 
       setTopUsers(sortedUsers.slice(0, 10));
-    } catch (error) {
-      console.error("Error fetching leaderboard:", error);
+    } catch {
       setError("Failed to fetch leaderboard data");
     } finally {
       setLoading(false);

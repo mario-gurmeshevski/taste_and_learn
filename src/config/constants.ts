@@ -111,3 +111,9 @@ export const ANSWER_LABELS = ["A", "B", "C", "D"] as const;
 
 /** Milliseconds to seconds conversion factor */
 export const MS_TO_SECONDS = 1000;
+
+export const MAX_NAME_LENGTH = 50;
+export const MAX_QUESTION_LENGTH = 500;
+export const MAX_OPTION_LENGTH = 200;
+export const MIN_NAME_LENGTH = 1;
+export const USERNAME_REGEX = /^[a-zA-Z0-9\s\-_'.]+$/;

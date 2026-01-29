@@ -6,49 +6,26 @@ import React, {
   useMemo,
 } from "react";
 import { RealtimeChannel } from "@supabase/supabase-js";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  FaPlay,
-  FaPause,
-  FaRedo,
-  FaBackward,
-  FaForward,
-  FaSpinner,
-  FaQrcode,
-} from "react-icons/fa";
+import { motion } from "framer-motion";
 import toast from "react-hot-toast";
-import { QRCodeSVG } from "qrcode.react";
 import supabase from "../lib/supabase";
-import { Plyr } from "plyr-react";
+import { useAbortController } from "../hooks/useAbortController";
 import "plyr-react/plyr.css";
 import type { BroadcastState, PlyrRef, User } from "../config/types";
 import {
   ADMIN_SYNC_INTERVAL,
-  SKIP_AMOUNT,
   BROADCAST_CHANNEL_NAME,
   DB_TABLES,
   USER_ROLES,
   DB_FIELDS,
 } from "../config/constants";
-
-// Helper function to generate consistent animation props for buttons
-const getButtonAnimationProps = (delay: number, enabled: boolean = true) => ({
-  initial: { opacity: 0, scale: 0.8 },
-  animate: { opacity: 1, scale: 1 },
-  transition: { delay },
-  whileHover: enabled
-    ? {
-        scale: 1.05,
-        y: -2,
-        transition: { duration: 0.2 },
-      }
-    : {},
-  whileTap: enabled
-    ? { scale: 0.95, transition: { duration: 0.1 } }
-    : {},
-});
+import VideoControls from "./admin/VideoControls";
+import BroadcastStatus from "./admin/BroadcastStatus";
+import VideoPlayer from "./admin/VideoPlayer";
+import QRCodeModal from "./admin/QRCodeModal";
 
 const AdminPanel: React.FC = () => {
+  const { safeTimeout } = useAbortController();
   const [broadcastState, setBroadcastState] =
     useState<BroadcastState | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -64,7 +41,9 @@ const AdminPanel: React.FC = () => {
   const videoSrc = useMemo(
     () => ({
       type: "video" as const,
-      sources: [{ src: import.meta.env.VITE_VIDEO_URL, type: "video/mp4" }],
+      sources: [
+        { src: import.meta.env.VITE_VIDEO_URL, type: "video/mp4" },
+      ],
     }),
     [],
   );
@@ -93,32 +72,32 @@ const AdminPanel: React.FC = () => {
 
   // Check authentication
   useEffect(() => {
-    const checkAuth = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        if (!session) {
+          window.location.href = "/login";
+          return;
+        }
 
-      if (!session) {
-        window.location.href = "/login";
-        return;
-      }
+        const { data: userData } = await supabase
+          .from(DB_TABLES.USERS)
+          .select("*")
+          .eq(DB_FIELDS.ID, session.user.id)
+          .maybeSingle();
 
-      const { data: userData } = await supabase
-        .from(DB_TABLES.USERS)
-        .select("*")
-        .eq(DB_FIELDS.ID, session.user.id)
-        .maybeSingle();
+        if (!userData || userData.role !== USER_ROLES.ADMIN) {
+          window.location.href = "/";
+          return;
+        }
 
-      if (!userData || userData.role !== USER_ROLES.ADMIN) {
-        window.location.href = "/";
-        return;
-      }
+        setCurrentUser(userData);
+        setLoading(false);
+      },
+    );
 
-      setCurrentUser(userData);
-      setLoading(false);
+    return () => {
+      authListener.subscription.unsubscribe();
     };
-
-    checkAuth();
   }, []);
 
   const updateBroadcastState = useCallback(
@@ -156,8 +135,6 @@ const AdminPanel: React.FC = () => {
               : null,
           );
 
-          // Send broadcast update to all subscribers
-          // Use updateData which includes the new updated_at timestamp
           const updatedState = broadcastStateRef.current
             ? { ...broadcastStateRef.current, ...updateData }
             : (updateData as BroadcastState);
@@ -169,14 +146,17 @@ const AdminPanel: React.FC = () => {
                 event: "broadcast-state-update",
                 payload: updatedState,
               })
-              .catch((err: unknown) =>
-                console.error("Broadcast error:", err),
-              );
-          } else {
-            console.warn("Broadcast channel not ready");
+              .catch((err) => {
+                console.error(
+                  "Broadcast send error in AdminPanel:",
+                  err,
+                );
+                toast.error("Failed to broadcast update to clients", {
+                  icon: "📡",
+                  duration: 3000,
+                });
+              });
           }
-        } else {
-          console.error("Update failed:", error);
         }
       } finally {
         isUpdating.current = false;
@@ -236,7 +216,7 @@ const AdminPanel: React.FC = () => {
       if (data && plyrRef.current?.plyr) {
         setBroadcastState(data);
 
-        setTimeout(() => {
+        safeTimeout(() => {
           if (plyrRef.current?.plyr && data.current_position > 0) {
             plyrRef.current.plyr.currentTime = data.current_position;
           }
@@ -244,7 +224,19 @@ const AdminPanel: React.FC = () => {
           if (data.is_playing) {
             const playPromise = plyrRef.current?.plyr.play();
             if (playPromise instanceof Promise) {
-              playPromise.catch(console.error);
+              playPromise.catch((err) => {
+                console.error(
+                  "Video autoplay failed in AdminPanel:",
+                  err,
+                );
+                toast.error(
+                  "Autoplay prevented - please interact with the page",
+                  {
+                    icon: "🚫",
+                    duration: 4000,
+                  },
+                );
+              });
             }
           } else {
             plyrRef.current?.plyr.pause();
@@ -255,7 +247,6 @@ const AdminPanel: React.FC = () => {
 
     fetchBroadcastState();
 
-    // Set up broadcast channel for sending updates
     const channel = supabase
       .channel(BROADCAST_CHANNEL_NAME)
       .subscribe((status) => {
@@ -265,13 +256,12 @@ const AdminPanel: React.FC = () => {
       });
 
     return () => {
-      // Clear the ref when channel is removed
       broadcastChannelRef.current = null;
       if (channel) {
         supabase.removeChannel(channel);
       }
     };
-  }, [isPlayerReady, currentUser]);
+  }, [isPlayerReady, currentUser, safeTimeout]);
 
   const handlePlay = async () => {
     if (!isPlayerReady || !plyrRef.current?.plyr) return;
@@ -284,16 +274,22 @@ const AdminPanel: React.FC = () => {
         current_position: currentTime,
       });
 
-      setTimeout(() => {
-        const playPromise = plyrRef.current?.plyr.play();
+      safeTimeout(() => {
+        const playPromise = plyrRef.current?.plyr?.play();
         if (playPromise instanceof Promise) {
-          playPromise.catch(console.error);
+          playPromise.catch((err) => {
+            console.error("Video play failed in handlePlay:", err);
+            toast.error("Failed to play video - please try again", {
+              icon: "⚠️",
+              duration: 3000,
+            });
+          });
         }
       }, 100);
 
       toast.success("Broadcast started", { icon: "▶️" });
-    } catch (error) {
-      console.error("Error in handlePlay:", error);
+    } catch (err) {
+      console.error("Failed to start broadcast:", err);
       toast.error("Failed to start broadcast");
     }
   };
@@ -311,8 +307,7 @@ const AdminPanel: React.FC = () => {
       });
 
       toast.success("Broadcast paused", { icon: "⏸️" });
-    } catch (error) {
-      console.error("Error in handlePause:", error);
+    } catch {
       toast.error("Failed to pause broadcast");
     }
   };
@@ -323,8 +318,7 @@ const AdminPanel: React.FC = () => {
     try {
       plyrRef.current.plyr.currentTime = seconds;
       await updateBroadcastState({ current_position: seconds });
-    } catch (error) {
-      console.error("Error in handleSeek:", error);
+    } catch {
       toast.error("Failed to seek video");
     }
   };
@@ -348,10 +342,9 @@ const AdminPanel: React.FC = () => {
 
     try {
       const currentTime = plyrRef.current.plyr.currentTime;
-      await handleSeek(currentTime + SKIP_AMOUNT);
-      toast(`Skipped forward ${SKIP_AMOUNT} seconds`, { icon: "⏩" });
-    } catch (error) {
-      console.error("Error in handleSkipForward:", error);
+      await handleSeek(currentTime + 10);
+      toast("Skipped forward 10 seconds", { icon: "⏩" });
+    } catch {
       toast.error("Failed to skip forward");
     }
   };
@@ -361,12 +354,11 @@ const AdminPanel: React.FC = () => {
 
     try {
       const currentTime = plyrRef.current.plyr.currentTime;
-      await handleSeek(Math.max(0, currentTime - SKIP_AMOUNT));
-      toast(`Skipped backward ${SKIP_AMOUNT} seconds`, {
+      await handleSeek(Math.max(0, currentTime - 10));
+      toast("Skipped backward 10 seconds", {
         icon: "⏪",
       });
-    } catch (error) {
-      console.error("Error in handleSkipBackward:", error);
+    } catch {
       toast.error("Failed to skip backward");
     }
   };
@@ -396,214 +388,28 @@ const AdminPanel: React.FC = () => {
             Admin Controls
           </h2>
 
-          <div
-            className="flex flex-wrap gap-2 mb-3 sm:mb-4"
-            role="group"
-            aria-label="Broadcast controls"
-          >
-            <motion.button
-              onClick={handlePlay}
-              disabled={!isPlayerReady}
-              {...getButtonAnimationProps(0.1, isPlayerReady)}
-              aria-label="Start or play broadcast"
-              className={`${
-                isPlayerReady
-                  ? "bg-green-500/30 border-green-400/30 shadow-lg shadow-green-500/20"
-                  : "bg-gray-500/20 border-gray-500/20 cursor-not-allowed opacity-50"
-              } backdrop-blur-md text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium border flex items-center gap-1 sm:gap-2`}
-            >
-              <FaPlay className="text-sm" aria-hidden="true" />{" "}
-              Start/Play
-            </motion.button>
+          <VideoControls
+            isPlayerReady={isPlayerReady}
+            onPlay={handlePlay}
+            onPause={handlePause}
+            onRestart={handleRestart}
+            onSkipBackward={handleSkipBackward}
+            onSkipForward={handleSkipForward}
+            onShowQR={() => setShowQRModal(true)}
+          />
 
-            <motion.button
-              onClick={handlePause}
-              disabled={!isPlayerReady}
-              {...getButtonAnimationProps(0.15, isPlayerReady)}
-              aria-label="Pause broadcast"
-              className={`${
-                isPlayerReady
-                  ? "bg-yellow-500/30 border-yellow-400/30 shadow-lg shadow-yellow-500/20"
-                  : "bg-gray-500/20 border-gray-500/20 cursor-not-allowed opacity-50"
-              } backdrop-blur-md text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium border flex items-center gap-1 sm:gap-2`}
-            >
-              <FaPause className="text-sm" aria-hidden="true" /> Pause
-            </motion.button>
-
-            <motion.button
-              onClick={handleRestart}
-              disabled={!isPlayerReady}
-              {...getButtonAnimationProps(0.25, isPlayerReady)}
-              aria-label="Restart broadcast from beginning"
-              className={`${
-                isPlayerReady
-                  ? "bg-blue-500/30 border-blue-400/30 shadow-lg shadow-blue-500/20"
-                  : "bg-gray-500/20 border-gray-500/20 cursor-not-allowed opacity-50"
-              } backdrop-blur-md text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium border flex items-center gap-1 sm:gap-2`}
-            >
-              <FaRedo className="text-sm" aria-hidden="true" />{" "}
-              Restart
-            </motion.button>
-
-            <motion.button
-              onClick={handleSkipBackward}
-              disabled={!isPlayerReady}
-              {...getButtonAnimationProps(0.3, isPlayerReady)}
-              aria-label={`Skip backward ${SKIP_AMOUNT} seconds`}
-              className={`${
-                isPlayerReady
-                  ? "bg-neutral-400/20 border-neutral-400/20 shadow-lg shadow-neutral-500/10"
-                  : "bg-gray-500/20 border-gray-500/20 cursor-not-allowed opacity-50"
-              } backdrop-blur-md text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium border flex items-center gap-1 sm:gap-2`}
-            >
-              <FaBackward className="text-sm" aria-hidden="true" />{" "}
-              -10s
-            </motion.button>
-
-            <motion.button
-              onClick={handleSkipForward}
-              disabled={!isPlayerReady}
-              {...getButtonAnimationProps(0.35, isPlayerReady)}
-              aria-label={`Skip forward ${SKIP_AMOUNT} seconds`}
-              className={`${
-                isPlayerReady
-                  ? "bg-neutral-400/20 border-neutral-400/20 shadow-lg shadow-neutral-500/10"
-                  : "bg-gray-500/20 border-gray-500/20 cursor-not-allowed opacity-50"
-              } backdrop-blur-md text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium border flex items-center gap-1 sm:gap-2`}
-            >
-              <FaForward className="text-sm" aria-hidden="true" />{" "}
-              +10s
-            </motion.button>
-
-            <motion.button
-              onClick={() => setShowQRModal(true)}
-              {...getButtonAnimationProps(0.4)}
-              aria-label="Show quiz QR code"
-              className="bg-purple-500/30 border-purple-400/30 shadow-lg shadow-purple-500/20 backdrop-blur-md text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium border flex items-center gap-1 sm:gap-2"
-            >
-              <FaQrcode className="text-sm" aria-hidden="true" /> Quiz
-              QR
-            </motion.button>
-          </div>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-            className="text-white text-xs sm:text-sm"
-          >
-            <p>
-              Status:
-              <span className="font-bold flex items-center gap-2">
-                {broadcastState?.is_playing ? (
-                  <>
-                    <FaPlay aria-hidden="true" /> Playing
-                  </>
-                ) : (
-                  <>
-                    <FaPause aria-hidden="true" /> Paused
-                  </>
-                )}
-              </span>
-            </p>
-            <p>
-              Current Time:
-              <span className="font-bold">
-                {(broadcastState?.current_position ?? 0).toFixed(2)}s
-              </span>
-            </p>
-          </motion.div>
+          <BroadcastStatus broadcastState={broadcastState} />
         </motion.div>
 
-        <div className="w-full h-[calc(100vh-20rem)]">
-          {!isPlayerReady && (
-            <div className="w-full h-full flex items-center justify-center bg-black text-white">
-              <div className="text-center">
-                <FaSpinner className="animate-spin h-12 w-12 mx-auto" />
-                <p className="mt-4">Loading video player...</p>
-              </div>
-            </div>
-          )}
-          <Plyr
-            ref={plyrRef}
-            source={videoSrc}
-            options={videoOptions}
-          />
-        </div>
+        <VideoPlayer
+          videoSrc={videoSrc}
+          videoOptions={videoOptions}
+          plyrRef={plyrRef}
+          isPlayerReady={isPlayerReady}
+        />
       </div>
 
-      {/* QR Code Modal */}
-      <AnimatePresence>
-        {showQRModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-            onClick={() => setShowQRModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              transition={{
-                type: "spring",
-                damping: 25,
-                stiffness: 300,
-              }}
-              className="bg-neutral-900 border border-neutral-700 rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-white text-xl sm:text-2xl font-bold">
-                  Quiz QR Code
-                </h3>
-                <button
-                  onClick={() => setShowQRModal(false)}
-                  className="text-neutral-400 hover:text-white transition-colors text-2xl leading-none"
-                  aria-label="Close modal"
-                >
-                  ×
-                </button>
-              </div>
-
-              <div className="flex flex-col items-center gap-6">
-                <div className="bg-white p-4 rounded-xl shadow-lg">
-                  <QRCodeSVG
-                    value={`${window.location.origin}/quiz`}
-                    size={200}
-                    level="M"
-                  />
-                </div>
-
-                <div className="text-center">
-                  <p className="text-neutral-300 text-sm mb-2">
-                    Scan to join the quiz
-                  </p>
-                  <p className="text-neutral-400 text-xs break-all">
-                    {`${window.location.origin}/quiz`}
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(
-                      `${window.location.origin}/quiz`,
-                    );
-                    toast.success("URL copied to clipboard!", {
-                      icon: "📋",
-                    });
-                  }}
-                  className="w-full bg-purple-500/30 border border-purple-400/30 hover:bg-purple-500/40 text-white px-4 py-3 rounded-lg font-medium transition-all duration-200"
-                >
-                  Copy URL
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <QRCodeModal showQRModal={showQRModal} onClose={() => setShowQRModal(false)} />
     </div>
   );
 };
