@@ -6,7 +6,13 @@ import { useAuth } from "../contexts/AuthContext";
 import { sanitizeText } from "../lib/sanitize";
 
 const Login: React.FC = () => {
-  const { isAuthenticated, checkingAuth, loading, signInAnonymously, signInWithPassword } = useAuth();
+  const {
+    isAuthenticated,
+    checkingAuth,
+    loading,
+    signInAnonymously,
+    signInWithPassword,
+  } = useAuth();
   const [isAdminLogin, setIsAdminLogin] = useState(false);
   const [userName, setUserName] = useState("");
   const [email, setEmail] = useState("");
@@ -17,20 +23,30 @@ const Login: React.FC = () => {
 
   // Handle redirect when authenticated
   useEffect(() => {
-    if (isAuthenticated && !checkingAuth && !hasRedirectedRef.current) {
+    if (
+      isAuthenticated &&
+      !checkingAuth &&
+      !loading &&
+      !hasRedirectedRef.current
+    ) {
       hasRedirectedRef.current = true;
 
-      // Check if there's a saved redirect path
-      const redirectPath = localStorage.getItem("redirectPath");
+      // Small delay to ensure auth state has fully settled
+      const timer = setTimeout(() => {
+        // Check if there's a saved redirect path
+        const redirectPath = localStorage.getItem("redirectPath");
 
-      if (redirectPath && redirectPath !== "/login") {
-        localStorage.removeItem("redirectPath");
-        navigate(redirectPath, { replace: true });
-      } else {
-        navigate("/quiz", { replace: true });
-      }
+        if (redirectPath && redirectPath !== "/login") {
+          localStorage.removeItem("redirectPath");
+          navigate(redirectPath, { replace: true });
+        } else {
+          navigate("/quiz", { replace: true });
+        }
+      }, 100);
+
+      return () => clearTimeout(timer);
     }
-  }, [isAuthenticated, checkingAuth, navigate]);
+  }, [isAuthenticated, checkingAuth, loading, navigate]);
 
   // Show loading while checking auth
   if (checkingAuth) {
@@ -79,7 +95,13 @@ const Login: React.FC = () => {
       await signInWithPassword(email, password);
       // Navigation will be handled by useEffect
     } catch (err) {
-      setError(sanitizeText(err instanceof Error ? err.message : "An unexpected error occurred. Please try again."));
+      setError(
+        sanitizeText(
+          err instanceof Error
+            ? err.message
+            : "An unexpected error occurred. Please try again.",
+        ),
+      );
     }
   };
 

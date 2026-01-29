@@ -24,11 +24,11 @@ export function useBroadcastState(
   options: UseBroadcastStateOptions = {},
 ): UseBroadcastStateReturn {
   const { enabled = true, onBroadcastError } = options;
-  const { isAborted, safeTimeout, safeInterval } = useAbortController();
+  const { isAborted, safeTimeout, safeInterval } =
+    useAbortController();
 
-  const [broadcastState, setBroadcastState] = useState<BroadcastState | null>(
-    null,
-  );
+  const [broadcastState, setBroadcastState] =
+    useState<BroadcastState | null>(null);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -152,7 +152,10 @@ export function useBroadcastState(
       } catch (err) {
         const errorObj =
           err instanceof Error ? err : new Error(String(err));
-        console.error("Subscription initialization failed in useBroadcastState:", err);
+        console.error(
+          "Subscription initialization failed in useBroadcastState:",
+          err,
+        );
         setError(errorObj);
         onBroadcastError?.(errorObj);
 
@@ -174,7 +177,13 @@ export function useBroadcastState(
       hasSuccessfullySubscribedRef.current = false; // Reset for potential remount
       setIsSubscribed(false);
     };
-  }, [enabled, isAborted, safeTimeout, safeInterval, onBroadcastError]);
+  }, [
+    enabled,
+    isAborted,
+    safeTimeout,
+    safeInterval,
+    onBroadcastError,
+  ]);
 
   return {
     broadcastState,

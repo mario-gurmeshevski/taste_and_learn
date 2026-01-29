@@ -7,7 +7,10 @@ const Plyr = lazy(() =>
 );
 
 interface VideoPlayerProps {
-  videoSrc: { type: "video"; sources: { src: string; type: string }[] };
+  videoSrc: {
+    type: "video";
+    sources: { src: string; type: string }[];
+  };
   videoOptions: { controls: string[] };
   plyrRef: React.RefObject<PlyrRef | null>;
   isPlayerReady: boolean;
@@ -33,7 +36,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           )
         }
       >
-        <Plyr ref={plyrRef} source={videoSrc} options={videoOptions} />
+        <Plyr
+          ref={plyrRef}
+          source={videoSrc}
+          options={videoOptions}
+        />
       </Suspense>
     </div>
   );

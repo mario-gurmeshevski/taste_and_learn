@@ -108,7 +108,8 @@ const Home: React.FC = () => {
 
   // Initial sync to broadcast state
   useEffect(() => {
-    if (!isPlayerReady || !broadcastState || !plyrRef.current?.plyr) return;
+    if (!isPlayerReady || !broadcastState || !plyrRef.current?.plyr)
+      return;
 
     syncToPosition(plyrRef.current.plyr, {
       position: broadcastState.current_position,
@@ -228,7 +229,9 @@ const Home: React.FC = () => {
 
   const videoSrc = {
     type: "video" as const,
-    sources: [{ src: import.meta.env.VITE_VIDEO_URL, type: "video/mp4" }],
+    sources: [
+      { src: import.meta.env.VITE_VIDEO_URL, type: "video/mp4" },
+    ],
   };
 
   return (
@@ -249,12 +252,12 @@ const Home: React.FC = () => {
               className="bg-yellow-900 border border-yellow-600 text-yellow-200 p-3 sm:p-4 mb-3 sm:mb-4 rounded-lg overflow-hidden"
             >
               <p className="font-medium flex items-center gap-2 text-sm sm:text-base">
-                <FaPause aria-hidden="true" /> You've paused the stream
-                locally
+                <FaPause aria-hidden="true" /> You've paused the
+                stream locally
               </p>
               <p className="text-xs sm:text-sm">
-                Click "Resume to Live" to jump back to the admin's current
-                broadcast position
+                Click "Resume to Live" to jump back to the admin's
+                current broadcast position
               </p>
             </motion.div>
           )}
@@ -267,11 +270,12 @@ const Home: React.FC = () => {
           className="bg-blue-900 border border-blue-600 text-blue-200 p-3 sm:p-4 mb-3 sm:mb-4 rounded-lg"
         >
           <p className="font-medium text-xs sm:text-sm flex items-center gap-2">
-            <FaLock aria-hidden="true" /> You are viewing a live broadcast
-            controlled by the admin
+            <FaLock aria-hidden="true" /> You are viewing a live
+            broadcast controlled by the admin
           </p>
           <p className="text-xs mt-1">
-            You can pause locally, but you cannot seek or control playback.
+            You can pause locally, but you cannot seek or control
+            playback.
             <span className="inline-flex items-center gap-1">
               {isSubscribed ? (
                 <>
@@ -363,8 +367,8 @@ const Home: React.FC = () => {
                     : "bg-gray-500 cursor-not-allowed opacity-50"
                 } text-white px-4 sm:px-6 py-2 sm:py-3 rounded text-xs sm:text-sm font-medium transition-colors flex items-center gap-1 sm:gap-2`}
               >
-                <FaPlay className="text-sm sm:text-base" /> Resume
-                to Live
+                <FaPlay className="text-sm sm:text-base" /> Resume to
+                Live
               </motion.button>
             )}
           </AnimatePresence>

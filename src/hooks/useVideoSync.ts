@@ -39,7 +39,8 @@ export function useVideoSync(options: UseVideoSyncOptions) {
     isLocallyPaused = false,
   } = options;
 
-  const [isUpdatingFromBroadcast, setIsUpdatingFromBroadcast] = useState(false);
+  const [isUpdatingFromBroadcast, setIsUpdatingFromBroadcast] =
+    useState(false);
 
   // Memoized last known state for efficient comparisons
   const lastKnownState = useMemo(() => {
@@ -55,7 +56,12 @@ export function useVideoSync(options: UseVideoSyncOptions) {
 
   // Client-side interpolation sync
   useEffect(() => {
-    if (!enabled || !playerRef.current?.plyr || isLocallyPaused || !lastKnownState) {
+    if (
+      !enabled ||
+      !playerRef.current?.plyr ||
+      isLocallyPaused ||
+      !lastKnownState
+    ) {
       return;
     }
 
@@ -67,7 +73,8 @@ export function useVideoSync(options: UseVideoSyncOptions) {
 
       // Calculate expected position based on time elapsed
       const now = Date.now();
-      const timeElapsed = (now - lastKnownState.timestamp) / MS_TO_SECONDS;
+      const timeElapsed =
+        (now - lastKnownState.timestamp) / MS_TO_SECONDS;
       const expectedPosition = lastKnownState.isPlaying
         ? lastKnownState.position + timeElapsed
         : lastKnownState.position;
@@ -100,7 +107,13 @@ export function useVideoSync(options: UseVideoSyncOptions) {
     }, VIDEO_SYNC_INTERVAL);
 
     return () => clearInterval(syncInterval);
-  }, [enabled, isLocallyPaused, lastKnownState, playerRef, isUpdatingFromBroadcast]);
+  }, [
+    enabled,
+    isLocallyPaused,
+    lastKnownState,
+    playerRef,
+    isUpdatingFromBroadcast,
+  ]);
 
   return {
     lastKnownState,

@@ -409,7 +409,10 @@ const AdminPanel: React.FC = () => {
         />
       </div>
 
-      <QRCodeModal showQRModal={showQRModal} onClose={() => setShowQRModal(false)} />
+      <QRCodeModal
+        showQRModal={showQRModal}
+        onClose={() => setShowQRModal(false)}
+      />
     </div>
   );
 };
