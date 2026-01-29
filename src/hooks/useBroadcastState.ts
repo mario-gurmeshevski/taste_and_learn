@@ -20,15 +20,6 @@ interface UseBroadcastStateReturn {
   error: Error | null;
 }
 
-/**
- * Custom hook for managing broadcast state with realtime subscription and polling fallback.
- *
- * This hook subscribes to the broadcast state channel and provides automatic fallback
- * to polling if the realtime subscription fails.
- *
- * @param options - Configuration options
- * @returns Current broadcast state, subscription status, and any errors
- */
 export function useBroadcastState(
   options: UseBroadcastStateOptions = {},
 ): UseBroadcastStateReturn {
@@ -99,7 +90,7 @@ export function useBroadcastState(
         cleanupSubscriptionTimer = safeTimeout(() => {
           // Only start polling if we haven't successfully subscribed yet
           if (!hasSuccessfullySubscribedRef.current && !isAborted()) {
-            console.log(
+            console.error(
               "useBroadcastState: Subscription timeout, falling back to polling",
             );
             startPolling();
@@ -120,7 +111,6 @@ export function useBroadcastState(
               if (isAborted()) return;
 
               const newState = payload.new as BroadcastState;
-              console.log("Received postgres_changes UPDATE:", newState);
               setBroadcastState(newState);
               setError(null);
             },
@@ -132,7 +122,6 @@ export function useBroadcastState(
               if (isAborted()) return;
 
               const newState = payload.payload as BroadcastState;
-              console.log("Received broadcast message:", newState);
               setBroadcastState(newState);
               setError(null);
             },
@@ -154,7 +143,7 @@ export function useBroadcastState(
               status === "TIMED_OUT"
             ) {
               // Subscription failed - start polling immediately
-              console.log(
+              console.error(
                 `useBroadcastState: Subscription ${status}, falling back to polling`,
               );
               startPolling();
