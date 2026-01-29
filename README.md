@@ -20,6 +20,7 @@ An interactive video quiz application where users watch synchronized video conte
   - **Admins**: See all users with full details (name, score, attempts)
 - **Question Management**: Access and manage quiz questions
 - **User Analytics**: Track user performance and quiz sessions
+- **QR Code Sharing**: Generate QR codes for easy mobile access
 
 ### Authentication & Security
 
@@ -29,16 +30,19 @@ An interactive video quiz application where users watch synchronized video conte
 - **Role-Based Access**: Admin-only routes (`/admin`, `/leaderboard`)
 - **Smart Redirects**: Saves attempted routes and redirects after login
 - **Login Guard**: Authenticated users automatically redirected from `/login`
+- **XSS Protection**: DOMPurify sanitization for user-generated content
 
 ## Tech Stack
 
 - **Frontend**: React 19.2 + TypeScript, Vite 7.2
 - **Styling**: Tailwind CSS 4.1
 - **Backend**: Supabase (PostgreSQL with Row Level Security)
-- **Video**: Plyr React 6.0
+- **Video**: Plyr React 6.0 (hosted on Cloudflare R2)
 - **Real-time**: Supabase Realtime subscriptions
 - **Routing**: React Router DOM 7.12
 - **Animations**: Framer Motion 12.26
+- **UI Libraries**: React Icons, React Hot Toast, QRCode.React
+- **Security**: DOMPurify for XSS protection
 
 ## Setup
 
@@ -70,9 +74,14 @@ Rename `.env.example` to `.env` and add your credentials:
 ```env
 VITE_SUPABASE_URL=your-supabase-project-url
 VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY=your-supabase-anon-key
+VITE_VIDEO_URL=your-cloudflare-r2-video-url
 ```
 
-### 4. Run Development Server
+### 4. Set Up Video Hosting
+
+Upload your video file to **Cloudflare R2** (or any CDN) and add the public URL to your `.env` file as `VITE_VIDEO_URL`.
+
+### 5. Run Development Server
 
 ```bash
 npm run dev
@@ -80,7 +89,7 @@ npm run dev
 
 The app will be available at `http://localhost:5173`
 
-### 5. Set Up Admin User
+### 6. Set Up Admin User
 
 To enable admin features, manually update a user's role in Supabase:
 
@@ -106,38 +115,60 @@ The app includes a `vercel.json` configuration file for easy deployment to Verce
 
 ```
 src/
-├── App.tsx                  # Main app with routing configuration
-├── main.tsx                 # Application entry point
+├── App.tsx                      # Main app with routing configuration
+├── main.tsx                     # Application entry point
 ├── config/
-│   ├── types.ts             # TypeScript type definitions
-│   └── constants.ts         # Application constants
+│   ├── types.ts                 # TypeScript type definitions
+│   └── constants.ts             # Application constants (timing, DB tables, etc.)
 ├── components/
-│   ├── Home.tsx             # Video player with synchronized quiz overlay
-│   ├── Quiz.tsx             # Timed quiz component (30-second countdown)
-│   ├── Leaderboard.tsx      # Leaderboard display with podium view
-│   ├── LeaderboardPage.tsx  # Leaderboard page wrapper with auth
-│   ├── AdminPanel.tsx       # Admin controls for broadcast & questions
-│   ├── Login.tsx            # Anonymous & admin authentication
-│   ├── Navbar.tsx           # Navigation bar with user info
-│   ├── ProtectedRoute.tsx   # Auth guard component for protected routes
-│   ├── NotFound.tsx         # 404 not found page
-│   └── Skeleton.tsx         # Loading skeleton component
-├── lib/
-│   ├── supabase.ts          # Supabase client configuration
-│   └── discriminator.ts     # Type discrimination utilities
-└── assets/
-    └── video.mp4            # Video content
+│   ├── Home.tsx                 # Video player with synchronized quiz overlay
+│   ├── Quiz.tsx                 # Main quiz component with state management
+│   ├── Leaderboard.tsx          # Leaderboard display with podium view
+│   ├── LeaderboardPage.tsx      # Leaderboard page wrapper with auth
+│   ├── AdminPanel.tsx           # Admin controls for broadcast & questions
+│   ├── Login.tsx                # Anonymous & admin authentication
+│   ├── Navbar.tsx               # Navigation bar with user info
+│   ├── ProtectedRoute.tsx       # Auth guard component for protected routes
+│   ├── NotFound.tsx             # 404 not found page
+│   ├── ErrorBoundary.tsx        # Error handling wrapper
+│   ├── Skeleton.tsx             # Loading skeleton component
+│   ├── admin/                   # Admin panel components
+│   │   ├── VideoControls.tsx    # Play/pause/seek controls
+│   │   ├── BroadcastStatus.tsx  # Current broadcast state display
+│   │   ├── VideoPlayer.tsx      # Admin video player
+│   │   └── QRCodeModal.tsx      # QR code generation for sharing
+│   └── quiz/                    # Quiz component modules
+│       ├── QuizState.ts         # Quiz reducer & state management
+│       ├── QuizLoading.tsx      # Loading state
+│       ├── QuizError.tsx        # Error handling
+│       ├── QuizComplete.tsx     # Completion screen
+│       ├── QuizWaiting.tsx      # Waiting state
+│       ├── QuizHeader.tsx       # Timer and question counter
+│       ├── QuizQuestion.tsx     # Main question display
+│       └── QuizAnswerButton.tsx # Answer option button
+├── contexts/
+│   └── BroadcastContext.tsx     # Global broadcast state provider
+├── hooks/
+│   ├── useBroadcastState.ts     # Realtime subscription + polling fallback
+│   ├── useBroadcast.ts          # Hook for accessing broadcast context
+│   ├── useVideoSync.ts          # Client-side interpolation & drift correction
+│   └── useAbortController.ts    # Cleanup utility for async operations
+└── lib/
+    ├── supabase.ts              # Supabase client configuration
+    ├── sanitize.ts              # DOMPurify integration for XSS protection
+    └── animations.ts            # Consistent Framer Motion props
+
 sql/
-├── supabase_schema.sql      # Database schema with RLS policies
-├── questions.sql            # Sample quiz questions data
-└── users.sql                # User management queries
+├── supabase_schema.sql          # Database schema with RLS policies
+├── questions.sql                # Sample quiz questions data
+└── users.sql                    # User management queries
 ```
 
 ## Authentication Flow
 
 ### User Login
 
-1. User enters name → Creates anonymous account
+1. User enters name → Creates anonymous account with 4-digit discriminator
 2. Redirects to `/quiz` or saved route
 3. Can participate in quizzes and view their scores
 
@@ -162,6 +193,7 @@ sql/
 
 - `id` (UUID, links to auth.users)
 - `name` (TEXT)
+- `discriminator` (TEXT) - 4-digit unique code (e.g., "1234")
 - `role` (TEXT: 'user' or 'admin')
 - `created_at` (TIMESTAMP)
 
@@ -173,6 +205,7 @@ sql/
 - `correct_answer_index` (INTEGER) - 0-based index of correct answer
 - `start_timestamp` (INTEGER) - question appears at this video time (seconds)
 - `end_timestamp` (INTEGER) - question disappears at this video time (seconds)
+- `created_at` (TIMESTAMP)
 
 **answers**
 
@@ -193,27 +226,36 @@ sql/
 - `total_score` (INTEGER)
 - `questions_count` (INTEGER)
 
+**quiz_session_questions**
+
+- Junction table linking quiz sessions to specific questions
+- Tracks user answers per question in a session
+
 **public_broadcast_state**
 
 - Single-row table for real-time video synchronization
-- `current_time` (INTEGER) - current video position
+- `current_position` (DECIMAL) - current video position in seconds
 - `is_playing` (BOOLEAN) - playback state
-- `current_question_id` (INTEGER) - active question
+- `updated_by` (UUID) - admin who last updated the state
 - `updated_at` (TIMESTAMP)
 
 ## Real-time Architecture
 
-The application uses a dual-sync mechanism for video synchronization:
+The application uses a sophisticated dual-sync mechanism for video synchronization:
 
 1. **Primary**: Supabase Realtime subscriptions to `public_broadcast_state`
 2. **Fallback**: 5-second polling if real-time fails
+3. **Client-side interpolation**: Calculates expected position between syncs for smooth playback
+4. **Drift detection**: Corrects time drift when it exceeds 1-second tolerance
 
 When the admin controls the video:
 
-1. Admin updates `public_broadcast_state` table
-2. Real-time subscription pushes changes to all clients
-3. Video players sync to the broadcast state
+1. Admin updates `public_broadcast_state` table via AdminPanel
+2. Real-time subscription pushes changes to all subscribed clients
+3. Video players sync to the broadcast state using client-side interpolation
 4. Quiz questions activate based on video timestamps
+
+This architecture ensures synchronization works even if the real-time connection fails.
 
 ## Adding Questions
 
@@ -243,6 +285,31 @@ INSERT INTO questions (
 - 30-second timer starts when question becomes visible
 - Auto-submits when timer expires
 - Video seeking is blocked to prevent skipping unanswered questions
+
+## Architecture Highlights
+
+### Modular Component Structure
+
+The application uses a modular architecture with:
+
+- **Context API** for global broadcast state management
+- **Custom hooks** for reusable logic (broadcast state, video sync, abort controller)
+- **Component composition** with dedicated quiz and admin sub-components
+- **Error boundaries** for graceful error handling
+
+### Performance Optimizations
+
+- **Code splitting**: Large libraries loaded in separate chunks
+- **Lazy loading**: Plyr video player loaded on-demand
+- **Memoization**: Expensive computations cached with useMemo
+- **Efficient sync**: Client-side interpolation reduces server calls
+
+### Security Features
+
+- **Row Level Security (RLS)**: Users can only access their own data
+- **XSS Protection**: DOMPurify sanitizes all user-generated content
+- **Role-based access**: Admin routes protected both client-side and server-side
+- **Anonymous auth**: Persistent user identities without password management
 
 ## License
 

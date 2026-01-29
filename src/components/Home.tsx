@@ -6,7 +6,6 @@ import React, {
   Suspense,
   useMemo,
 } from "react";
-import { RealtimeChannel } from "@supabase/supabase-js";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaLock,
@@ -16,15 +15,13 @@ import {
 } from "react-icons/fa";
 import toast from "react-hot-toast";
 import supabase from "../lib/supabase";
+import { useBroadcast } from "../hooks/useBroadcast";
+import { useVideoSyncManual } from "../hooks/useVideoSync";
 import "plyr-react/plyr.css";
-import type { BroadcastState, PlyrRef, User } from "../config/types";
+import type { PlyrRef, User } from "../config/types";
 import { VideoPlayerSkeleton } from "./Skeleton";
 import {
-  VIDEO_SYNC_INTERVAL,
-  POLLING_INTERVAL,
-  MAX_DRIFT_TOLERANCE,
   MS_TO_SECONDS,
-  BROADCAST_CHANNEL_NAME,
   DB_TABLES,
   USER_ROLES,
   DB_FIELDS,
@@ -35,45 +32,29 @@ const Plyr = lazy(() =>
 );
 
 const Home: React.FC = () => {
+  const { broadcastState, isSubscribed } = useBroadcast();
+  const { syncToPosition } = useVideoSyncManual();
+
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [broadcastState, setBroadcastState] =
-    useState<BroadcastState | null>(null);
   const [isLocallyPaused, setIsLocallyPaused] = useState(false);
   const [isPlayerReady, setIsPlayerReady] = useState(false);
-  const [isSubscribed, setIsSubscribed] = useState(false);
 
   const plyrRef = useRef<PlyrRef>(null);
-  const isUpdatingFromBroadcast = useRef(false);
-  const broadcastStateRef = useRef<BroadcastState | null>(null);
+
+  // Derive lastKnownState from broadcastState
+  const lastKnownState = useMemo(() => {
+    if (!broadcastState) {
+      return null;
+    }
+    return {
+      position: broadcastState.current_position,
+      timestamp: new Date(broadcastState.updated_at).getTime(),
+      isPlaying: broadcastState.is_playing,
+    };
+  }, [broadcastState]);
 
   // Check authentication and load user profile
   useEffect(() => {
-    const checkAuth = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      // Set realtime auth for subscriptions
-      if (session?.access_token) {
-        supabase.realtime.setAuth(session.access_token);
-      }
-
-      if (session?.user) {
-        const { data: userData } = await supabase
-          .from(DB_TABLES.USERS)
-          .select("*")
-          .eq(DB_FIELDS.ID, session.user.id)
-          .maybeSingle();
-
-        if (userData) {
-          setCurrentUser(userData);
-        }
-      }
-    };
-
-    checkAuth();
-
-    // Listen for auth changes
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         // Update realtime auth when session changes
@@ -102,22 +83,7 @@ const Home: React.FC = () => {
     };
   }, []);
 
-  // Keep ref in sync
-  useEffect(() => {
-    broadcastStateRef.current = broadcastState;
-  }, [broadcastState]);
-
-  const lastKnownState = useMemo(() => {
-    if (!broadcastState) {
-      return null;
-    }
-    return {
-      position: broadcastState.current_position,
-      timestamp: new Date(broadcastState.updated_at).getTime(),
-      isPlaying: broadcastState.is_playing,
-    };
-  }, [broadcastState]);
-
+  // Check if player is ready
   useEffect(() => {
     let mounted = true;
     let timeoutId: ReturnType<typeof setTimeout>;
@@ -140,6 +106,17 @@ const Home: React.FC = () => {
     };
   }, []);
 
+  // Initial sync to broadcast state
+  useEffect(() => {
+    if (!isPlayerReady || !broadcastState || !plyrRef.current?.plyr) return;
+
+    syncToPosition(plyrRef.current.plyr, {
+      position: broadcastState.current_position,
+      timestamp: new Date(broadcastState.updated_at).getTime(),
+      isPlaying: broadcastState.is_playing,
+    });
+  }, [isPlayerReady, broadcastState, syncToPosition]);
+
   // Client-side interpolation sync
   useEffect(() => {
     if (
@@ -151,8 +128,6 @@ const Home: React.FC = () => {
       return;
 
     const syncInterval = setInterval(() => {
-      if (isUpdatingFromBroadcast.current) return;
-
       const player = plyrRef.current?.plyr;
       if (!player) return;
 
@@ -167,120 +142,27 @@ const Home: React.FC = () => {
       const currentTime = player.currentTime || 0;
       const timeDiff = Math.abs(expectedPosition - currentTime);
 
-      // Only sync if drift > MAX_DRIFT_TOLERANCE second
-      if (timeDiff > MAX_DRIFT_TOLERANCE && !player.seeking) {
-        isUpdatingFromBroadcast.current = true;
+      // Only sync if drift exceeds tolerance
+      if (timeDiff > 0.5 && !player.seeking) {
         player.currentTime = expectedPosition;
-
-        setTimeout(() => {
-          isUpdatingFromBroadcast.current = false;
-        }, 200);
       }
 
       // Sync play/pause state
       if (lastKnownState.isPlaying && player.paused) {
         const playPromise = player.play();
         if (playPromise instanceof Promise) {
-          playPromise.catch(console.error);
+          playPromise.catch((error) => {
+            console.error("Video play failed during sync:", error);
+            // Don't show toast for frequent sync attempts to avoid spam
+          });
         }
       } else if (!lastKnownState.isPlaying && !player.paused) {
         player.pause();
       }
-    }, VIDEO_SYNC_INTERVAL);
+    }, 100);
 
     return () => clearInterval(syncInterval);
   }, [isPlayerReady, isLocallyPaused, lastKnownState]);
-
-  // Initial fetch and realtime subscription
-  useEffect(() => {
-    if (!isPlayerReady) return;
-
-    let channel: RealtimeChannel | null = null;
-    let broadcastSubscribed = false;
-    let fallbackTimeoutId: ReturnType<typeof setTimeout> | null =
-      null;
-
-    const setupSubscription = async () => {
-      // Fetch initial state first
-      const { data } = await supabase
-        .from(DB_TABLES.PUBLIC_BROADCAST_STATE)
-        .select("*")
-        .maybeSingle();
-
-      if (data && plyrRef.current?.plyr) {
-        setBroadcastState(data);
-        plyrRef.current.plyr.currentTime = data.current_position;
-
-        if (data.is_playing) {
-          setTimeout(() => {
-            const playPromise = plyrRef.current?.plyr.play();
-            if (playPromise instanceof Promise) {
-              playPromise.catch(console.error);
-            }
-          }, 100);
-        }
-      }
-
-      // Set up realtime broadcast subscription
-      channel = supabase
-        .channel(BROADCAST_CHANNEL_NAME) // Same channel name as Quiz and Admin
-        .on(
-          "broadcast",
-          { event: "broadcast-state-update" },
-          (payload) => {
-            setBroadcastState(payload.payload as BroadcastState);
-          },
-        )
-        .subscribe((status) => {
-          if (status === "SUBSCRIBED") {
-            broadcastSubscribed = true;
-            setIsSubscribed(true);
-            // Clear the fallback timeout
-            if (fallbackTimeoutId) {
-              clearTimeout(fallbackTimeoutId);
-              fallbackTimeoutId = null;
-            }
-          }
-        });
-
-      // Fallback timeout - if not subscribed after 5 seconds, will use polling
-      fallbackTimeoutId = setTimeout(() => {
-        if (!broadcastSubscribed) {
-          // Will use polling instead
-        }
-      }, POLLING_INTERVAL);
-    };
-
-    setupSubscription();
-
-    return () => {
-      if (fallbackTimeoutId) {
-        clearTimeout(fallbackTimeoutId);
-      }
-      if (channel) {
-        supabase.removeChannel(channel);
-        setIsSubscribed(false);
-      }
-    };
-  }, [isPlayerReady]);
-
-  // Fallback polling if realtime isn't working
-  useEffect(() => {
-    if (!isPlayerReady || isSubscribed) return;
-
-    const pollInterval = setInterval(async () => {
-      const { data } = await supabase
-        .from(DB_TABLES.PUBLIC_BROADCAST_STATE)
-        .select("*")
-        .maybeSingle();
-
-      if (data) {
-        setBroadcastState(data);
-      }
-    }, 2000);
-
-    return () => clearInterval(pollInterval);
-  }, [isPlayerReady, isSubscribed]);
 
   const handleLocalPause = () => {
     if (plyrRef.current?.plyr && isPlayerReady) {
@@ -297,26 +179,9 @@ const Home: React.FC = () => {
       plyrRef.current?.plyr &&
       isPlayerReady
     ) {
-      // Calculate current expected position
-      const now = Date.now();
-      const timeElapsed =
-        (now - lastKnownState.timestamp) / MS_TO_SECONDS;
-      const expectedPosition = lastKnownState.isPlaying
-        ? lastKnownState.position + timeElapsed
-        : lastKnownState.position;
-
-      plyrRef.current.plyr.currentTime = expectedPosition;
+      syncToPosition(plyrRef.current.plyr, lastKnownState);
       setIsLocallyPaused(false);
       toast("Resumed to live broadcast", { icon: "▶️" });
-
-      if (lastKnownState.isPlaying) {
-        setTimeout(() => {
-          const playPromise = plyrRef.current?.plyr.play();
-          if (playPromise instanceof Promise) {
-            playPromise.catch(console.error);
-          }
-        }, 100);
-      }
     }
   };
 
@@ -384,12 +249,12 @@ const Home: React.FC = () => {
               className="bg-yellow-900 border border-yellow-600 text-yellow-200 p-3 sm:p-4 mb-3 sm:mb-4 rounded-lg overflow-hidden"
             >
               <p className="font-medium flex items-center gap-2 text-sm sm:text-base">
-                <FaPause aria-hidden="true" /> You've paused the
-                stream locally
+                <FaPause aria-hidden="true" /> You've paused the stream
+                locally
               </p>
               <p className="text-xs sm:text-sm">
-                Click "Resume to Live" to jump back to the admin's
-                current broadcast position
+                Click "Resume to Live" to jump back to the admin's current
+                broadcast position
               </p>
             </motion.div>
           )}
@@ -402,12 +267,11 @@ const Home: React.FC = () => {
           className="bg-blue-900 border border-blue-600 text-blue-200 p-3 sm:p-4 mb-3 sm:mb-4 rounded-lg"
         >
           <p className="font-medium text-xs sm:text-sm flex items-center gap-2">
-            <FaLock aria-hidden="true" /> You are viewing a live
-            broadcast controlled by the admin
+            <FaLock aria-hidden="true" /> You are viewing a live broadcast
+            controlled by the admin
           </p>
           <p className="text-xs mt-1">
-            You can pause locally, but you cannot seek or control
-            playback.
+            You can pause locally, but you cannot seek or control playback.
             <span className="inline-flex items-center gap-1">
               {isSubscribed ? (
                 <>
@@ -499,8 +363,8 @@ const Home: React.FC = () => {
                     : "bg-gray-500 cursor-not-allowed opacity-50"
                 } text-white px-4 sm:px-6 py-2 sm:py-3 rounded text-xs sm:text-sm font-medium transition-colors flex items-center gap-1 sm:gap-2`}
               >
-                <FaPlay className="text-sm sm:text-base" /> Resume to
-                Live
+                <FaPlay className="text-sm sm:text-base" /> Resume
+                to Live
               </motion.button>
             )}
           </AnimatePresence>

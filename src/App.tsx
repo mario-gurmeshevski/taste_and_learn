@@ -5,7 +5,6 @@ import {
   Route,
   useLocation,
 } from "react-router-dom";
-import { useEffect } from "react";
 import { AnimatePresence } from "framer-motion";
 import Home from "./components/Home";
 import Quiz from "./components/Quiz";
@@ -15,45 +14,26 @@ import Login from "./components/Login";
 import AdminPanel from "./components/AdminPanel";
 import ProtectedRoute from "./components/ProtectedRoute";
 import NotFound from "./components/NotFound";
-import supabase from "./lib/supabase";
+import ErrorBoundary from "./components/ErrorBoundary";
+import { AuthProvider } from "./contexts/AuthContext";
+import { BroadcastProvider } from "./contexts/BroadcastContext";
 
 function App() {
-  useEffect(() => {
-    const initAuth = async () => {
-      // Check if user has a session
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      // Set auth token for realtime if session exists
-      if (session?.access_token) {
-        supabase.realtime.setAuth(session.access_token);
-      }
-    };
-
-    initAuth();
-
-    // Listen for auth state changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.access_token) {
-        supabase.realtime.setAuth(session.access_token);
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
-
   return (
-    <Router>
-      <div className="min-h-screen">
-        <Navbar />
-        <PageTransition />
-      </div>
-    </Router>
+    <ErrorBoundary>
+      <AuthProvider>
+        <BroadcastProvider>
+          <Router>
+            <div className="min-h-screen">
+              <ErrorBoundary>
+                <Navbar />
+              </ErrorBoundary>
+              <PageTransition />
+            </div>
+          </Router>
+        </BroadcastProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 
@@ -64,14 +44,23 @@ const PageTransition: React.FC = () => {
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
         {/* Public route - no authentication required */}
-        <Route path="/login" element={<Login />} />
+        <Route
+          path="/login"
+          element={
+            <ErrorBoundary>
+              <Login />
+            </ErrorBoundary>
+          }
+        />
 
         {/* All other routes require authentication */}
         <Route
           path="/"
           element={
             <ProtectedRoute>
-              <Home />
+              <ErrorBoundary>
+                <Home />
+              </ErrorBoundary>
             </ProtectedRoute>
           }
         />
@@ -80,7 +69,9 @@ const PageTransition: React.FC = () => {
           path="/quiz"
           element={
             <ProtectedRoute>
-              <Quiz />
+              <ErrorBoundary>
+                <Quiz />
+              </ErrorBoundary>
             </ProtectedRoute>
           }
         />
@@ -89,7 +80,9 @@ const PageTransition: React.FC = () => {
           path="/leaderboard"
           element={
             <ProtectedRoute requireAdmin={true}>
-              <LeaderboardPage />
+              <ErrorBoundary>
+                <LeaderboardPage />
+              </ErrorBoundary>
             </ProtectedRoute>
           }
         />
@@ -98,13 +91,22 @@ const PageTransition: React.FC = () => {
           path="/admin"
           element={
             <ProtectedRoute requireAdmin={true}>
-              <AdminPanel />
+              <ErrorBoundary>
+                <AdminPanel />
+              </ErrorBoundary>
             </ProtectedRoute>
           }
         />
 
         {/* Catch-all route for undefined paths */}
-        <Route path="*" element={<NotFound />} />
+        <Route
+          path="*"
+          element={
+            <ErrorBoundary>
+              <NotFound />
+            </ErrorBoundary>
+          }
+        />
       </Routes>
     </AnimatePresence>
   );

@@ -1,85 +1,20 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaCrown, FaBars, FaTimes, FaUser } from "react-icons/fa";
-import toast from "react-hot-toast";
-import supabase from "../lib/supabase";
-import type { User } from "../config/types";
+import { useAuth } from "../contexts/AuthContext";
 import {
   SPRING_STIFFNESS,
   SPRING_DAMPING,
-  DB_TABLES,
-  USER_ROLES,
   ROUTES,
-  DB_FIELDS,
 } from "../config/constants";
 
 const Navbar: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [hoveredPath, setHoveredPath] = useState<string | null>(null);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  useEffect(() => {
-    // Check current session on mount
-    const checkAuth = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (session?.user) {
-        setIsAuthenticated(true);
-        // Fetch user data from database (works for both anonymous and regular users)
-        const { data: userData } = await supabase
-          .from(DB_TABLES.USERS)
-          .select("*")
-          .eq(DB_FIELDS.ID, session.user.id)
-          .maybeSingle();
-
-        if (userData) {
-          setCurrentUser(userData);
-          setIsAdmin(userData.role === USER_ROLES.ADMIN);
-        }
-      } else {
-        setIsAuthenticated(false);
-        setCurrentUser(null);
-        setIsAdmin(false);
-      }
-    };
-
-    checkAuth();
-
-    // Listen for auth state changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        setIsAuthenticated(true);
-
-        const { data: userData } = await supabase
-          .from(DB_TABLES.USERS)
-          .select("*")
-          .eq(DB_FIELDS.ID, session.user.id)
-          .maybeSingle();
-
-        if (userData) {
-          setCurrentUser(userData);
-          setIsAdmin(userData.role === USER_ROLES.ADMIN);
-        }
-      } else {
-        setIsAuthenticated(false);
-        setCurrentUser(null);
-        setIsAdmin(false);
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [location.pathname]);
+  const { user, isAuthenticated, isAdmin, signOut } = useAuth();
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -98,15 +33,10 @@ const Navbar: React.FC = () => {
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
-      setCurrentUser(null);
-      setIsAdmin(false);
-      setIsAuthenticated(false);
-      toast.success("Logged out successfully", { icon: "👋" });
+      await signOut();
       navigate(ROUTES.LOGIN);
     } catch (error) {
       console.error("Logout error:", error);
-      toast.error("Failed to log out");
     }
   };
 
@@ -191,7 +121,7 @@ const Navbar: React.FC = () => {
 
           {/* User Section - Desktop Only */}
           <div className="hidden md:flex items-center">
-            {isAuthenticated && currentUser ? (
+            {isAuthenticated && user ? (
               <div className="flex items-center gap-2 lg:gap-4">
                 <div className="flex items-center gap-2">
                   <FaUser
@@ -199,7 +129,7 @@ const Navbar: React.FC = () => {
                     aria-hidden="true"
                   />
                   <span className="text-sm text-neutral-700 font-medium truncate max-w-37.5">
-                    {currentUser.name}#{currentUser.discriminator}
+                    {user.name}#{user.discriminator}
                   </span>
                   {isAdmin && (
                     <span className="text-yellow-500">
@@ -268,7 +198,7 @@ const Navbar: React.FC = () => {
                     </Link>
                   </motion.div>
                 ))}
-                {isAuthenticated && currentUser && (
+                {isAuthenticated && user && (
                   <>
                     <motion.div
                       initial={{ opacity: 0, x: -20 }}
@@ -282,7 +212,7 @@ const Navbar: React.FC = () => {
                           aria-hidden="true"
                         />
                         <span className="font-medium">
-                          {currentUser.name}#{currentUser.discriminator}
+                          {user.name}#{user.discriminator}
                         </span>
                         {isAdmin && (
                           <FaCrown
