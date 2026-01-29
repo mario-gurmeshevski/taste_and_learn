@@ -30,7 +30,7 @@ export const JUMP_DETECTION_THRESHOLD = 2.0; // 2 seconds
 export const MAX_TIME_ELAPSED_CAP = 60; // 60 seconds
 
 /** Number of seconds to skip when using skip controls */
-export const SKIP_AMOUNT = 10; // 10 seconds
+export const SKIP_AMOUNT = 100; // 10 seconds
 
 // DATABASE CONFIGURATION
 
