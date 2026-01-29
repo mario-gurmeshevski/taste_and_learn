@@ -8,7 +8,10 @@ interface QRCodeModalProps {
   onClose: () => void;
 }
 
-const QRCodeModal: React.FC<QRCodeModalProps> = ({ showQRModal, onClose }) => {
+const QRCodeModal: React.FC<QRCodeModalProps> = ({
+  showQRModal,
+  onClose,
+}) => {
   return (
     <AnimatePresence>
       {showQRModal && (

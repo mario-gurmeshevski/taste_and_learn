@@ -10,7 +10,9 @@ import { BroadcastContext } from "../contexts/BroadcastContext";
 export function useBroadcast() {
   const context = useContext(BroadcastContext);
   if (context === undefined) {
-    throw new Error("useBroadcast must be used within a BroadcastProvider");
+    throw new Error(
+      "useBroadcast must be used within a BroadcastProvider",
+    );
   }
   return context;
 }

@@ -8,7 +8,12 @@ import { FaLock, FaSpinner } from "react-icons/fa";
 import supabase from "../lib/supabase";
 import { sanitizeText } from "../lib/sanitize";
 import type { LeaderboardUser } from "../config/types";
-import { DB_TABLES, USER_ROLES, DB_FIELDS, SORT_ORDER } from "../config/constants";
+import {
+  DB_TABLES,
+  USER_ROLES,
+  DB_FIELDS,
+  SORT_ORDER,
+} from "../config/constants";
 
 const Leaderboard: React.FC = () => {
   const [topUsers, setTopUsers] = useState<LeaderboardUser[]>([]);
@@ -73,9 +78,13 @@ const Leaderboard: React.FC = () => {
       const { data: sessionsData, error: sessionsError } =
         await supabase
           .from(DB_TABLES.QUIZ_SESSIONS)
-          .select(`${DB_FIELDS.USER_ID}, ${DB_FIELDS.TOTAL_SCORE}, ${DB_FIELDS.COMPLETED_AT}`)
+          .select(
+            `${DB_FIELDS.USER_ID}, ${DB_FIELDS.TOTAL_SCORE}, ${DB_FIELDS.COMPLETED_AT}`,
+          )
           .not(DB_FIELDS.COMPLETED_AT, "is", null)
-          .order(DB_FIELDS.TOTAL_SCORE, { ascending: SORT_ORDER.DESCENDING });
+          .order(DB_FIELDS.TOTAL_SCORE, {
+            ascending: SORT_ORDER.DESCENDING,
+          });
 
       if (sessionsError) throw sessionsError;
 

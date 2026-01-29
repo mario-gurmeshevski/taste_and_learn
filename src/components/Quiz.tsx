@@ -14,10 +14,7 @@ import { sanitizeText, sanitizeTextArray } from "../lib/sanitize";
 import { useAuth } from "../contexts/AuthContext";
 import { useAbortController } from "../hooks/useAbortController";
 import { useBroadcast } from "../hooks/useBroadcast";
-import type {
-  Question,
-  AnswerRecord,
-} from "../config/types";
+import type { Question, AnswerRecord } from "../config/types";
 import {
   RECENT_UPDATE_THRESHOLD,
   QUESTION_CLEAR_DELAY,
@@ -29,10 +26,7 @@ import {
   DB_FIELDS,
   SORT_ORDER,
 } from "../config/constants";
-import {
-  initialQuizState,
-  quizReducer,
-} from "./quiz/QuizState";
+import { initialQuizState, quizReducer } from "./quiz/QuizState";
 import QuizLoading from "./quiz/QuizLoading";
 import QuizError from "./quiz/QuizError";
 import QuizComplete from "./quiz/QuizComplete";
@@ -48,7 +42,8 @@ const Quiz: React.FC = () => {
   const [state, dispatch] = useReducer(quizReducer, initialQuizState);
 
   const [userName, setUserName] = useState<string>("");
-  const [userDiscriminator, setUserDiscriminator] = useState<string>("");
+  const [userDiscriminator, setUserDiscriminator] =
+    useState<string>("");
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,7 +103,9 @@ const Quiz: React.FC = () => {
             id: q.id,
             question_text: sanitizeText(q.question_text),
             options: sanitizeTextArray(
-              Array.isArray(q.options) ? q.options : JSON.parse(q.options),
+              Array.isArray(q.options)
+                ? q.options
+                : JSON.parse(q.options),
             ),
             correct_answer_index: q.correct_answer_index,
             start_timestamp: q.start_timestamp,
@@ -223,10 +220,12 @@ const Quiz: React.FC = () => {
         payload: Math.max(0, expectedPosition),
       });
 
-      animationFrameRef.current = requestAnimationFrame(updateLocalTime);
+      animationFrameRef.current =
+        requestAnimationFrame(updateLocalTime);
     };
 
-    animationFrameRef.current = requestAnimationFrame(updateLocalTime);
+    animationFrameRef.current =
+      requestAnimationFrame(updateLocalTime);
 
     return () => {
       if (animationFrameRef.current !== null) {
@@ -239,7 +238,8 @@ const Quiz: React.FC = () => {
   useEffect(() => {
     if (questions.length === 0 || state.quizCompleted) return;
 
-    const positionDelta = state.videoPosition - state.previousPosition;
+    const positionDelta =
+      state.videoPosition - state.previousPosition;
 
     if (
       state.initialSyncDone &&
@@ -283,7 +283,10 @@ const Quiz: React.FC = () => {
           });
           dispatch({ type: "SET_SELECTED_OPTION", payload: null });
           dispatch({ type: "SET_HAS_SUBMITTED", payload: false });
-          dispatch({ type: "SET_SHOW_CORRECT_ANSWER", payload: false });
+          dispatch({
+            type: "SET_SHOW_CORRECT_ANSWER",
+            payload: false,
+          });
         }
       }
     } else {
@@ -294,7 +297,10 @@ const Quiz: React.FC = () => {
         if (!state.lastAnsweredIds.has(state.currentQuestion.id)) {
           handleAutoSubmit(state.currentQuestion);
         } else if (state.hasSubmitted && !state.showCorrectAnswer) {
-          dispatch({ type: "SET_SHOW_CORRECT_ANSWER", payload: true });
+          dispatch({
+            type: "SET_SHOW_CORRECT_ANSWER",
+            payload: true,
+          });
           safeTimeout(() => {
             dispatch({ type: "RESET_QUIZ_STATE" });
           }, QUESTION_CLEAR_DELAY);
@@ -351,10 +357,13 @@ const Quiz: React.FC = () => {
         if (sessionError) throw sessionError;
       } catch (err) {
         console.error("Error saving quiz results:", err);
-        toast.error("Failed to save quiz results. Please try again.", {
-          icon: "💾",
-          duration: 5000,
-        });
+        toast.error(
+          "Failed to save quiz results. Please try again.",
+          {
+            icon: "💾",
+            duration: 5000,
+          },
+        );
       }
     },
     [userId, sessionId],
@@ -369,7 +378,13 @@ const Quiz: React.FC = () => {
       dispatch({ type: "SET_QUIZ_COMPLETED", payload: true });
       saveQuizResults(state.answers);
     }
-  }, [state.answers, state.lastAnsweredIds, state.quizCompleted, questions.length, saveQuizResults]);
+  }, [
+    state.answers,
+    state.lastAnsweredIds,
+    state.quizCompleted,
+    questions.length,
+    saveQuizResults,
+  ]);
 
   useEffect(() => {
     if (!state.currentQuestion) {
@@ -391,7 +406,12 @@ const Quiz: React.FC = () => {
     }, 1000);
 
     return cleanupInterval;
-  }, [state.currentQuestion, state.videoPosition, state.timeRemaining, safeInterval]);
+  }, [
+    state.currentQuestion,
+    state.videoPosition,
+    state.timeRemaining,
+    safeInterval,
+  ]);
 
   const handleOptionSelect = useCallback((optionIndex: number) => {
     dispatch({
@@ -401,15 +421,18 @@ const Quiz: React.FC = () => {
   }, []);
 
   const handleSubmitAnswer = useCallback(() => {
-    if (!state.currentQuestion || state.selectedOption === null) return;
+    if (!state.currentQuestion || state.selectedOption === null)
+      return;
 
     const newAnswer: AnswerRecord = {
       question_id: state.currentQuestion.id,
       selected_option: state.selectedOption,
       is_correct:
-        state.selectedOption === state.currentQuestion.correct_answer_index,
+        state.selectedOption ===
+        state.currentQuestion.correct_answer_index,
       score:
-        state.selectedOption === state.currentQuestion.correct_answer_index
+        state.selectedOption ===
+        state.currentQuestion.correct_answer_index
           ? 1
           : 0,
     };
@@ -430,7 +453,10 @@ const Quiz: React.FC = () => {
   }, [questions, state.lastAnsweredIds, state.videoPosition]);
 
   const totalScore = useMemo(() => {
-    return state.answers.reduce((sum, answer) => sum + answer.score, 0);
+    return state.answers.reduce(
+      (sum, answer) => sum + answer.score,
+      0,
+    );
   }, [state.answers]);
 
   if (loading) {

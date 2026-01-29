@@ -8,9 +8,9 @@ export interface BroadcastContextValue {
   error: Error | null;
 }
 
-const BroadcastContext = createContext<BroadcastContextValue | undefined>(
-  undefined,
-);
+const BroadcastContext = createContext<
+  BroadcastContextValue | undefined
+>(undefined);
 
 interface BroadcastProviderProps {
   children: ReactNode;

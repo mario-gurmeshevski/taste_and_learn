@@ -21,6 +21,7 @@ export function useAbortController() {
 
   /**
    * Checks if the operation has been aborted.
+   * Memoized with empty deps for stable reference.
    */
   const isAborted = useCallback((): boolean => {
     return abortControllerRef.current?.signal.aborted ?? false;
@@ -29,40 +30,41 @@ export function useAbortController() {
   /**
    * Executes a callback only if not aborted.
    * Useful for setTimeout callbacks and event handlers.
+   * Reads directly from ref to avoid dependency chain.
    */
   const ifNotAborted = useCallback((callback: () => void) => {
     return () => {
-      if (!isAborted()) {
+      if (!abortControllerRef.current?.signal.aborted) {
         callback();
       }
     };
-  }, [isAborted]);
+  }, []);
 
   /**
    * Creates a timeout that automatically cleans up on abort or unmount.
    * Returns a cleanup function.
    */
-  const safeTimeout = useCallback((
-    callback: () => void,
-    delay: number,
-  ): (() => void) => {
-    const timeoutId = setTimeout(ifNotAborted(callback), delay);
+  const safeTimeout = useCallback(
+    (callback: () => void, delay: number): (() => void) => {
+      const timeoutId = setTimeout(ifNotAborted(callback), delay);
 
-    return () => clearTimeout(timeoutId);
-  }, [ifNotAborted]);
+      return () => clearTimeout(timeoutId);
+    },
+    [ifNotAborted],
+  );
 
   /**
    * Creates an interval that automatically cleans up on abort or unmount.
    * Returns a cleanup function.
    */
-  const safeInterval = useCallback((
-    callback: () => void,
-    delay: number,
-  ): (() => void) => {
-    const intervalId = setInterval(ifNotAborted(callback), delay);
+  const safeInterval = useCallback(
+    (callback: () => void, delay: number): (() => void) => {
+      const intervalId = setInterval(ifNotAborted(callback), delay);
 
-    return () => clearInterval(intervalId);
-  }, [ifNotAborted]);
+      return () => clearInterval(intervalId);
+    },
+    [ifNotAborted],
+  );
 
   return {
     isAborted,
