@@ -151,14 +151,11 @@ export const AuthProvider: React.FC<{
         });
         setIsAdmin(userData.role === USER_ROLES.ADMIN);
       } else {
-        // Set default user role if no data found
-        setUser({
-          id: currentUserId,
-          name: "Unknown",
-          discriminator: "0000",
-          role: USER_ROLES.USER,
-          created_at: new Date().toISOString(),
-        });
+        // User account was deleted, sign them out
+        await supabase.auth.signOut();
+        setUser(null);
+        setUserId(null);
+        setIsAuthenticated(false);
         setIsAdmin(false);
       }
 
