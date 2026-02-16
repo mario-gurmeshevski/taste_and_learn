@@ -21,16 +21,6 @@ interface UseVideoSyncOptions {
   isLocallyPaused?: boolean;
 }
 
-/**
- * Custom hook for synchronizing video playback with broadcast state.
- *
- * Handles:
- * - Client-side interpolation for smooth playback
- * - Drift detection and correction
- * - Play/pause state synchronization
- *
- * @param options - Configuration options
- */
 export function useVideoSync(options: UseVideoSyncOptions) {
   const {
     playerRef,
@@ -54,13 +44,13 @@ export function useVideoSync(options: UseVideoSyncOptions) {
     };
   }, [broadcastState]);
 
-  // Client-side interpolation sync
   useEffect(() => {
     if (
       !enabled ||
       !playerRef.current?.plyr ||
       isLocallyPaused ||
-      !lastKnownState
+      !lastKnownState ||
+      !lastKnownState.isPlaying
     ) {
       return;
     }
@@ -71,38 +61,19 @@ export function useVideoSync(options: UseVideoSyncOptions) {
       const player = playerRef.current?.plyr;
       if (!player) return;
 
-      // Calculate expected position based on time elapsed
+      // Only runs when video is playing
       const now = Date.now();
       const timeElapsed =
         (now - lastKnownState.timestamp) / MS_TO_SECONDS;
-      const expectedPosition = lastKnownState.isPlaying
-        ? lastKnownState.position + timeElapsed
-        : lastKnownState.position;
+      const expectedPosition = lastKnownState.position + timeElapsed;
 
       const currentTime = player.currentTime || 0;
       const timeDiff = Math.abs(expectedPosition - currentTime);
 
-      // Only sync if drift exceeds tolerance
       if (timeDiff > MAX_DRIFT_TOLERANCE && !player.seeking) {
         setIsUpdatingFromBroadcast(true);
         player.currentTime = expectedPosition;
-
-        setTimeout(() => {
-          setIsUpdatingFromBroadcast(false);
-        }, 200);
-      }
-
-      // Sync play/pause state
-      if (lastKnownState.isPlaying && player.paused) {
-        const playPromise = player.play();
-        if (playPromise instanceof Promise) {
-          playPromise.catch((error) => {
-            console.error("Video play failed during sync:", error);
-            // Don't show toast for frequent sync attempts to avoid spam
-          });
-        }
-      } else if (!lastKnownState.isPlaying && !player.paused) {
-        player.pause();
+        setTimeout(() => setIsUpdatingFromBroadcast(false), 200);
       }
     }, VIDEO_SYNC_INTERVAL);
 
@@ -113,7 +84,7 @@ export function useVideoSync(options: UseVideoSyncOptions) {
     lastKnownState,
     playerRef,
     isUpdatingFromBroadcast,
-  ]);
+  ]); // Dependencies include lastKnownState now
 
   return {
     lastKnownState,
@@ -121,10 +92,6 @@ export function useVideoSync(options: UseVideoSyncOptions) {
   };
 }
 
-/**
- * Hook for manually syncing video player to broadcast state.
- * Useful for initial sync and resume operations.
- */
 export function useVideoSyncManual() {
   const syncToPosition = (
     player: PlyrRef["plyr"],

@@ -376,7 +376,7 @@ const AdminPanel: React.FC = () => {
   }
 
   return (
-    <div className="pt-16 bg-black min-h-screen">
+    <div className="pt-16 bg-black min-h-screen overflow-hidden">
       <div className="max-w-7xl mx-auto p-3 sm:p-4 md:p-6">
         <motion.div
           initial={{ opacity: 0, y: -20 }}

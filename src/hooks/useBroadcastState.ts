@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { RealtimeChannel } from "@supabase/supabase-js";
 import supabase from "../lib/supabase";
-import { useAbortController } from "./useAbortController";
 import type { BroadcastState } from "../config/types";
 import {
   POLLING_INTERVAL,
@@ -14,38 +13,46 @@ interface UseBroadcastStateOptions {
   onBroadcastError?: (error: Error) => void;
 }
 
-interface UseBroadcastStateReturn {
-  broadcastState: BroadcastState | null;
-  isSubscribed: boolean;
-  error: Error | null;
-}
-
 export function useBroadcastState(
   options: UseBroadcastStateOptions = {},
-): UseBroadcastStateReturn {
+) {
   const { enabled = true, onBroadcastError } = options;
-  const { isAborted, safeTimeout, safeInterval } =
-    useAbortController();
 
   const [broadcastState, setBroadcastState] =
     useState<BroadcastState | null>(null);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const hasSuccessfullySubscribedRef = useRef<boolean>(false);
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  const pollingIntervalRef = useRef<ReturnType<
+    typeof setInterval
+  > | null>(null);
+  const subscriptionTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+
+  const errorCallbackRef = useRef(onBroadcastError);
+  useEffect(() => {
+    errorCallbackRef.current = onBroadcastError;
+  }, [onBroadcastError]);
 
   useEffect(() => {
     if (!enabled) return;
 
-    let channel: RealtimeChannel | null = null;
-    let cleanupSubscriptionTimer: (() => void) | null = null;
-    let cleanupPollInterval: (() => void) | null = null;
+    let mounted = true;
+
+    const stopPolling = () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
 
     const startPolling = () => {
-      if (cleanupPollInterval) return; // Already polling
+      if (pollingIntervalRef.current) return; // Already polling
 
-      cleanupPollInterval = safeInterval(async () => {
-        if (isAborted()) return;
+      pollingIntervalRef.current = setInterval(async () => {
+        if (!mounted) return;
 
         try {
           const { data } = await supabase
@@ -53,141 +60,119 @@ export function useBroadcastState(
             .select("*")
             .maybeSingle();
 
-          if (data && !isAborted()) {
+          if (data && mounted) {
             setBroadcastState(data);
             setError(null);
           }
         } catch (err) {
           console.error("Polling error in useBroadcastState:", err);
-          // Silently handle polling errors to avoid spamming the user
         }
       }, POLLING_INTERVAL);
     };
 
-    const stopPolling = () => {
-      if (cleanupPollInterval) {
-        cleanupPollInterval();
-        cleanupPollInterval = null;
+    const cleanup = () => {
+      if (subscriptionTimeoutRef.current) {
+        clearTimeout(subscriptionTimeoutRef.current);
+        subscriptionTimeoutRef.current = null;
+      }
+      stopPolling();
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
       }
     };
 
-    const initSubscription = async () => {
-      if (isAborted()) return;
-
-      try {
-        // Fetch initial state
-        const { data } = await supabase
-          .from(DB_TABLES.PUBLIC_BROADCAST_STATE)
-          .select("*")
-          .maybeSingle();
-
-        if (data && !isAborted()) {
-          setBroadcastState(data);
-          setError(null);
-        }
-
-        // Start a timer for fallback to polling
-        cleanupSubscriptionTimer = safeTimeout(() => {
-          // Only start polling if we haven't successfully subscribed yet
-          if (!hasSuccessfullySubscribedRef.current && !isAborted()) {
-            console.error(
-              "useBroadcastState: Subscription timeout, falling back to polling",
-            );
-            startPolling();
+    // Fetch initial state
+    supabase
+      .from(DB_TABLES.PUBLIC_BROADCAST_STATE)
+      .select("*")
+      .maybeSingle()
+      .then(({ data, error: fetchError }) => {
+        if (mounted) {
+          if (data) {
+            setBroadcastState(data);
+            setError(null);
+          } else if (fetchError) {
+            console.error("Initial fetch error:", fetchError);
+            const err = new Error(fetchError.message);
+            setError(err);
+            errorCallbackRef.current?.(err);
           }
-        }, POLLING_INTERVAL);
+        }
+      });
 
-        // Subscribe to both database changes AND broadcast messages
-        channel = supabase
-          .channel(BROADCAST_CHANNEL_NAME)
-          .on(
-            "postgres_changes",
-            {
-              event: "UPDATE",
-              schema: "public",
-              table: DB_TABLES.PUBLIC_BROADCAST_STATE,
-            },
-            (payload) => {
-              if (isAborted()) return;
+    // Start subscription timeout - fallback to polling if not subscribed in time
+    subscriptionTimeoutRef.current = setTimeout(() => {
+      if (mounted && !isSubscribed) {
+        console.warn("Subscription timeout, falling back to polling");
+        startPolling();
+      }
+    }, POLLING_INTERVAL);
 
-              const newState = payload.new as BroadcastState;
-              setBroadcastState(newState);
-              setError(null);
-            },
-          )
-          .on(
-            "broadcast",
-            { event: "broadcast-state-update" },
-            (payload) => {
-              if (isAborted()) return;
+    // Setup subscription - check if channel already exists to prevent duplicates
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+    }
 
-              const newState = payload.payload as BroadcastState;
-              setBroadcastState(newState);
-              setError(null);
-            },
-          )
-          .subscribe((status) => {
-            if (isAborted()) return;
+    channelRef.current = supabase
+      .channel(BROADCAST_CHANNEL_NAME)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: DB_TABLES.PUBLIC_BROADCAST_STATE,
+        },
+        (payload) => {
+          if (!mounted) return;
+          const newState = payload.new as BroadcastState;
+          setBroadcastState(newState);
+          setError(null);
+        },
+      )
+      .on(
+        "broadcast",
+        { event: "broadcast-state-update" },
+        (payload) => {
+          if (!mounted) return;
+          const newState = payload.payload as BroadcastState;
+          setBroadcastState(newState);
+          setError(null);
+        },
+      )
+      .subscribe((status) => {
+        if (!mounted) return;
 
-            if (status === "SUBSCRIBED") {
-              // Subscription succeeded - stop the timer and polling
-              hasSuccessfullySubscribedRef.current = true;
-              setIsSubscribed(true);
-              if (cleanupSubscriptionTimer) {
-                cleanupSubscriptionTimer();
-                cleanupSubscriptionTimer = null;
-              }
-              stopPolling();
-            } else if (
-              status === "CHANNEL_ERROR" ||
-              status === "TIMED_OUT"
-            ) {
-              // Subscription failed - start polling immediately
-              console.error(
-                `useBroadcastState: Subscription ${status}, falling back to polling`,
-              );
-              startPolling();
-            }
-          });
-      } catch (err) {
-        const errorObj =
-          err instanceof Error ? err : new Error(String(err));
-        console.error(
-          "Subscription initialization failed in useBroadcastState:",
-          err,
-        );
-        setError(errorObj);
-        onBroadcastError?.(errorObj);
-
-        if (!isAborted()) {
+        if (status === "SUBSCRIBED") {
+          setIsSubscribed(true);
+          // Cancel fallback timeout and stop polling
+          if (subscriptionTimeoutRef.current) {
+            clearTimeout(subscriptionTimeoutRef.current);
+            subscriptionTimeoutRef.current = null;
+          }
+          stopPolling();
+        } else if (
+          status === "CHANNEL_ERROR" ||
+          status === "TIMED_OUT"
+        ) {
+          console.error(
+            `Subscription ${status}, falling back to polling`,
+          );
+          startPolling();
+        } else if (status === "CLOSED") {
+          // Channel closed unexpectedly - restart polling
+          console.warn("Channel closed, falling back to polling");
+          setIsSubscribed(false);
           startPolling();
         }
-      }
-    };
+      });
 
-    initSubscription();
-
-    // Cleanup
     return () => {
-      cleanupSubscriptionTimer?.();
-      cleanupPollInterval?.();
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
-      hasSuccessfullySubscribedRef.current = false; // Reset for potential remount
+      mounted = false;
+      cleanup();
       setIsSubscribed(false);
     };
-  }, [
-    enabled,
-    isAborted,
-    safeTimeout,
-    safeInterval,
-    onBroadcastError,
-  ]);
+  }, [enabled]);
 
-  return {
-    broadcastState,
-    isSubscribed,
-    error,
-  };
+  return { broadcastState, isSubscribed, error };
 }
