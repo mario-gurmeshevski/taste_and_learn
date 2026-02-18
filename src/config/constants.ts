@@ -117,3 +117,6 @@ export const MAX_QUESTION_LENGTH = 500;
 export const MAX_OPTION_LENGTH = 200;
 export const MIN_NAME_LENGTH = 1;
 export const USERNAME_REGEX = /^[a-zA-Z0-9\s\-_'.]+$/;
+
+/** Maximum time to wait for authentication check before timeout */
+export const AUTH_TIMEOUT = 15000; // 15 seconds

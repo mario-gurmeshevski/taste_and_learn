@@ -5,7 +5,6 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
-import { RealtimeChannel } from "@supabase/supabase-js";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
 import supabase from "../lib/supabase";
@@ -36,8 +35,9 @@ const AdminPanel: React.FC = () => {
   const plyrRef = useRef<PlyrRef>(null);
   const isUpdating = useRef(false);
   const broadcastStateRef = useRef<BroadcastState | null>(null);
-  const broadcastChannelRef = useRef<RealtimeChannel | null>(null);
-
+  const broadcastChannelRef = useRef<ReturnType<
+    typeof supabase.channel
+  > | null>(null);
   const videoSrc = useMemo(
     () => ({
       type: "video" as const,
@@ -215,12 +215,10 @@ const AdminPanel: React.FC = () => {
 
       if (data && plyrRef.current?.plyr) {
         setBroadcastState(data);
-
         safeTimeout(() => {
           if (plyrRef.current?.plyr && data.current_position > 0) {
             plyrRef.current.plyr.currentTime = data.current_position;
           }
-
           if (data.is_playing) {
             const playPromise = plyrRef.current?.plyr.play();
             if (playPromise instanceof Promise) {
@@ -247,19 +245,47 @@ const AdminPanel: React.FC = () => {
 
     fetchBroadcastState();
 
-    const channel = supabase
-      .channel(BROADCAST_CHANNEL_NAME)
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          broadcastChannelRef.current = channel;
-        }
-      });
+    let retryTimeout: ReturnType<typeof setTimeout> | null = null;
+    let currentChannel: ReturnType<typeof supabase.channel> | null =
+      null;
+
+    const setupChannel = () => {
+      // Clean up existing channel before creating a new one
+      if (currentChannel) {
+        supabase.removeChannel(currentChannel);
+        currentChannel = null;
+        broadcastChannelRef.current = null;
+      }
+
+      currentChannel = supabase
+        .channel(BROADCAST_CHANNEL_NAME)
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") {
+            broadcastChannelRef.current = currentChannel;
+          } else if (
+            status === "CHANNEL_ERROR" ||
+            status === "TIMED_OUT" ||
+            status === "CLOSED"
+          ) {
+            console.warn(
+              `Admin broadcast channel ${status}, retrying in 3s...`,
+            );
+            broadcastChannelRef.current = null;
+            retryTimeout = setTimeout(setupChannel, 3000);
+          }
+        });
+    };
+
+    setupChannel();
 
     return () => {
-      broadcastChannelRef.current = null;
-      if (channel) {
-        supabase.removeChannel(channel);
+      if (retryTimeout) clearTimeout(retryTimeout);
+      // currentChannel always holds the latest reference — no null-before-remove bug
+      if (currentChannel) {
+        supabase.removeChannel(currentChannel);
+        currentChannel = null;
       }
+      broadcastChannelRef.current = null;
     };
   }, [isPlayerReady, currentUser, safeTimeout]);
 
