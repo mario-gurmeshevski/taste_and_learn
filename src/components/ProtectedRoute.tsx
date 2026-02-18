@@ -1,7 +1,7 @@
 import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { FaSpinner } from "react-icons/fa";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import type { ProtectedRouteProps } from "../config/types";
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({

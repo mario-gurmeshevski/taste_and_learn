@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import type { PlyrRef } from "../config/types";
 import type { BroadcastState } from "../config/types";
@@ -93,35 +93,41 @@ export function useVideoSync(options: UseVideoSyncOptions) {
 }
 
 export function useVideoSyncManual() {
-  const syncToPosition = (
-    player: PlyrRef["plyr"],
-    targetState: VideoSyncState,
-  ): void => {
-    if (!player) return;
+  const syncToPosition = useCallback(
+    (player: PlyrRef["plyr"], targetState: VideoSyncState): void => {
+      if (!player) return;
 
-    const now = Date.now();
-    const timeElapsed = (now - targetState.timestamp) / MS_TO_SECONDS;
-    const expectedPosition = targetState.isPlaying
-      ? targetState.position + timeElapsed
-      : targetState.position;
+      const now = Date.now();
+      const timeElapsed =
+        (now - targetState.timestamp) / MS_TO_SECONDS;
+      const expectedPosition = targetState.isPlaying
+        ? targetState.position + timeElapsed
+        : targetState.position;
 
-    player.currentTime = expectedPosition;
+      player.currentTime = expectedPosition;
 
-    if (targetState.isPlaying) {
-      setTimeout(() => {
-        const playPromise = player.play();
-        if (playPromise instanceof Promise) {
-          playPromise.catch((error) => {
-            console.error("Video play failed in manual sync:", error);
-            toast.error("Failed to play video - please try again", {
-              icon: "⚠️",
-              duration: 3000,
+      if (targetState.isPlaying) {
+        setTimeout(() => {
+          const playPromise = player.play();
+          if (playPromise instanceof Promise) {
+            playPromise.catch((error) => {
+              console.error(
+                "Video play failed in manual sync:",
+                error,
+              );
+              toast.error("Failed to play video - please try again", {
+                icon: "⚠️",
+                duration: 3000,
+              });
             });
-          });
-        }
-      }, 100);
-    }
-  };
+          }
+        }, 100);
+      } else {
+        player.pause();
+      }
+    },
+    [],
+  ); // stable reference
 
   return { syncToPosition };
 }

@@ -1,6 +1,5 @@
 import React, {
   createContext,
-  useContext,
   useState,
   useEffect,
   useCallback,
@@ -47,12 +46,14 @@ interface AuthActions {
 /**
  * Combined authentication context
  */
-type AuthContextType = AuthState & AuthActions;
+export type AuthContextType = AuthState & AuthActions;
 
 // Create context with undefined default value
 const AuthContext = createContext<AuthContextType | undefined>(
   undefined,
 );
+
+export { AuthContext };
 
 /**
  * AuthProvider component - manages all authentication state and logic
@@ -469,59 +470,6 @@ export const AuthProvider: React.FC<{
       {children}
     </AuthContext.Provider>
   );
-};
-
-/**
- * Hook to access authentication context
- * Throws error if used outside AuthProvider
- */
-export const useAuth = (): AuthContextType => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
-};
-
-/**
- * Hook to access current user data
- */
-export const useUser = (): User | null => {
-  const { user } = useAuth();
-  return user;
-};
-
-/**
- * Hook to require authentication - throws error if not authenticated
- */
-export const useRequireAuth = (): {
-  user: User;
-  userId: string;
-  isAdmin: boolean;
-} => {
-  const { user, userId, isAuthenticated, isAdmin } = useAuth();
-
-  if (!isAuthenticated || !user || !userId) {
-    throw new Error("User must be authenticated");
-  }
-
-  return { user, userId, isAdmin };
-};
-
-/**
- * Hook to require admin role - throws error if not admin
- */
-export const useRequireAdmin = (): {
-  user: User;
-  userId: string;
-} => {
-  const { user, userId, isAdmin } = useAuth();
-
-  if (!isAdmin || !user || !userId) {
-    throw new Error("User must be an admin");
-  }
-
-  return { user, userId };
 };
 
 export default AuthContext;

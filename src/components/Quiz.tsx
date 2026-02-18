@@ -11,7 +11,7 @@ import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import supabase from "../lib/supabase";
 import { sanitizeText, sanitizeTextArray } from "../lib/sanitize";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import { useAbortController } from "../hooks/useAbortController";
 import { useBroadcast } from "../hooks/useBroadcast";
 import type { Question, AnswerRecord } from "../config/types";
@@ -392,24 +392,22 @@ const Quiz: React.FC = () => {
       return;
     }
 
-    const remaining = Math.max(
-      0,
-      state.currentQuestion.end_timestamp - state.videoPosition,
-    );
-    dispatch({ type: "SET_TIME_REMAINING", payload: remaining });
-
     const cleanupInterval = safeInterval(() => {
-      dispatch({
-        type: "SET_TIME_REMAINING",
-        payload: Math.max(0, state.timeRemaining - 1),
-      });
+      if (!state.currentQuestion) return;
+
+      const remaining = Math.max(
+        0,
+        state.currentQuestion.end_timestamp - state.videoPosition,
+      );
+
+      dispatch({ type: "SET_TIME_REMAINING", payload: remaining });
     }, 1000);
 
     return cleanupInterval;
   }, [
     state.currentQuestion,
     state.videoPosition,
-    state.timeRemaining,
+    state.lastKnownState,
     safeInterval,
   ]);
 
