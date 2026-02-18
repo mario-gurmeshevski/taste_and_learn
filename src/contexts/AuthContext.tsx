@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import React, {
   createContext,
   useContext,
@@ -6,6 +5,7 @@ import React, {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
 } from "react";
 import toast from "react-hot-toast";
 import supabase from "../lib/supabase";
@@ -16,6 +16,7 @@ import {
   DB_TABLES,
   USER_ROLES,
   DB_FIELDS,
+  AUTH_TIMEOUT,
 } from "../config/constants";
 
 /**
@@ -65,6 +66,14 @@ export const AuthProvider: React.FC<{
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const timeoutRef = useRef<number | null>(null);
+
+  const clearAuthTimeout = useCallback(() => {
+    if (timeoutRef.current !== null) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }, []);
 
   /**
    * Fetch user data from database with retry logic
@@ -116,6 +125,7 @@ export const AuthProvider: React.FC<{
         setUserId(null);
         setIsAuthenticated(false);
         setIsAdmin(false);
+        clearAuthTimeout();
         setCheckingAuth(false);
         return;
       }
@@ -131,6 +141,7 @@ export const AuthProvider: React.FC<{
 
       // Skip fetch on SIGNED_IN (too early), wait for INITIAL_SESSION or TOKEN_REFRESHED
       if (event === "SIGNED_IN") {
+        clearAuthTimeout();
         setCheckingAuth(false);
         return;
       }
@@ -159,9 +170,10 @@ export const AuthProvider: React.FC<{
         setIsAdmin(false);
       }
 
+      clearAuthTimeout();
       setCheckingAuth(false);
     },
-    [fetchUserData],
+    [fetchUserData, clearAuthTimeout],
   );
 
   /**
@@ -178,11 +190,24 @@ export const AuthProvider: React.FC<{
       await updateAuthState(session, event);
     });
 
+    timeoutRef.current = window.setTimeout(() => {
+      if (mounted && checkingAuth) {
+        setCheckingAuth(false);
+        toast.error(
+          "Connection taking longer than expected. Please try logging in.",
+          { icon: "⏱️", duration: 5000 },
+        );
+      }
+    }, AUTH_TIMEOUT);
+
     return () => {
       mounted = false;
       subscription.unsubscribe();
+      if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current);
+      }
     };
-  }, [updateAuthState]);
+  }, [updateAuthState, checkingAuth]);
 
   /**
    * Sign in anonymously with user name
