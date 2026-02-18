@@ -12,6 +12,7 @@ import { useAbortController } from "../hooks/useAbortController";
 import "plyr-react/plyr.css";
 import type { BroadcastState, PlyrRef, User } from "../config/types";
 import {
+  DEBUG_MODE,
   ADMIN_SYNC_INTERVAL,
   BROADCAST_CHANNEL_NAME,
   DB_TABLES,
@@ -24,6 +25,8 @@ import VideoPlayer from "./admin/VideoPlayer";
 import QRCodeModal from "./admin/QRCodeModal";
 
 const AdminPanel: React.FC = () => {
+  if (DEBUG_MODE) console.log("[ADMIN:COMPONENT] AdminPanel mounted");
+
   const { safeTimeout } = useAbortController();
   const [broadcastState, setBroadcastState] =
     useState<BroadcastState | null>(null);
@@ -109,6 +112,13 @@ const AdminPanel: React.FC = () => {
       )
         return;
 
+      if (DEBUG_MODE) {
+        console.log(
+          "[ADMIN:UPDATE] Attempting to update broadcast state:",
+          updates,
+        );
+      }
+
       isUpdating.current = true;
 
       try {
@@ -124,6 +134,9 @@ const AdminPanel: React.FC = () => {
           .eq("id", broadcastStateRef.current.id);
 
         if (!error) {
+          if (DEBUG_MODE) {
+            console.log("[ADMIN:UPDATE] Successfully updated DB");
+          }
           setBroadcastState((prev) =>
             prev
               ? {
@@ -140,6 +153,11 @@ const AdminPanel: React.FC = () => {
             : (updateData as BroadcastState);
 
           if (broadcastChannelRef.current) {
+            if (DEBUG_MODE) {
+              console.log(
+                "[ADMIN:BROADCAST] Sending realtime update to clients",
+              );
+            }
             broadcastChannelRef.current
               .send({
                 type: "broadcast",
@@ -251,6 +269,12 @@ const AdminPanel: React.FC = () => {
 
     const setupChannel = () => {
       // Clean up existing channel before creating a new one
+      if (DEBUG_MODE) {
+        console.log(
+          "[ADMIN:CHANNEL] Creating admin channel:",
+          BROADCAST_CHANNEL_NAME,
+        );
+      }
       if (currentChannel) {
         supabase.removeChannel(currentChannel);
         currentChannel = null;
@@ -260,6 +284,9 @@ const AdminPanel: React.FC = () => {
       currentChannel = supabase
         .channel(BROADCAST_CHANNEL_NAME)
         .subscribe((status) => {
+          if (DEBUG_MODE) {
+            console.log("[ADMIN:CHANNEL] Status:", status);
+          }
           if (status === "SUBSCRIBED") {
             broadcastChannelRef.current = currentChannel;
           } else if (
@@ -295,6 +322,7 @@ const AdminPanel: React.FC = () => {
     try {
       const currentTime = plyrRef.current.plyr.currentTime;
 
+      if (DEBUG_MODE) console.log("[ADMIN:CONTROL] ▶️ Play clicked");
       await updateBroadcastState({
         is_playing: true,
         current_position: currentTime,
@@ -325,6 +353,7 @@ const AdminPanel: React.FC = () => {
 
     try {
       const currentPosition = plyrRef.current.plyr.currentTime;
+      if (DEBUG_MODE) console.log("[ADMIN:CONTROL] ⏸️ Pause clicked");
       plyrRef.current.plyr.pause();
 
       await updateBroadcastState({
@@ -342,6 +371,8 @@ const AdminPanel: React.FC = () => {
     if (!isPlayerReady || !plyrRef.current?.plyr) return;
 
     try {
+      if (DEBUG_MODE)
+        console.log("[ADMIN:CONTROL] ⏭️ Seek to", seconds, "seconds");
       plyrRef.current.plyr.currentTime = seconds;
       await updateBroadcastState({ current_position: seconds });
     } catch {

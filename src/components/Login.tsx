@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { FaSpinner } from "react-icons/fa";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import { sanitizeText } from "../lib/sanitize";
 
 const Login: React.FC = () => {

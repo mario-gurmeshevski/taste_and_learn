@@ -1,4 +1,5 @@
 import { createContext, type ReactNode, useCallback } from "react";
+import { DEBUG_MODE } from "../config/constants";
 import { useBroadcastState } from "../hooks/useBroadcastState";
 import type { BroadcastState } from "../config/types";
 
@@ -27,10 +28,25 @@ export function BroadcastProvider({
   children,
   enabled = true,
 }: BroadcastProviderProps) {
+  if (DEBUG_MODE)
+    console.log(
+      "[BROADCAST:PROVIDER] BroadcastProvider initialized - enabled:",
+      enabled,
+    );
+
   const handleBroadcastError = useCallback((error: Error) => {
+    if (DEBUG_MODE)
+      console.error(
+        "[BROADCAST:PROVIDER] Error callback invoked:",
+        error,
+      );
     console.error("Broadcast error:", error);
   }, []);
 
+  if (DEBUG_MODE)
+    console.log(
+      "[BROADCAST:PROVIDER] Calling useBroadcastState hook",
+    );
   const broadcastStateData = useBroadcastState({
     enabled,
     onBroadcastError: handleBroadcastError,

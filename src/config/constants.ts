@@ -1,7 +1,15 @@
+// DEBUGGING
+
+/** Enable/disable console logging for debugging subscription and broadcast */
+export const DEBUG_MODE = true;
+
 // TIMING & POLLING INTERVALS (milliseconds)
 
 /** Polling interval for broadcast state fallback */
 export const POLLING_INTERVAL = 5000; // 5 seconds
+
+/** Polling interval as safety net when realtime is subscribed */
+export const POLLING_INTERVAL_BACKUP = 30000; // 30 seconds
 
 /** Time window to consider a broadcast update as "recent" */
 export const RECENT_UPDATE_THRESHOLD = 5000; // 5 seconds

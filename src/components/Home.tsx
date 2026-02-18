@@ -21,6 +21,7 @@ import "plyr-react/plyr.css";
 import type { PlyrRef, User } from "../config/types";
 import { VideoPlayerSkeleton } from "./Skeleton";
 import {
+  DEBUG_MODE,
   MS_TO_SECONDS,
   DB_TABLES,
   USER_ROLES,
@@ -32,6 +33,9 @@ const Plyr = lazy(() =>
 );
 
 const Home: React.FC = () => {
+  if (DEBUG_MODE)
+    console.log("[HOME:COMPONENT] Home component mounted");
+
   const { broadcastState, isSubscribed } = useBroadcast();
   const { syncToPosition } = useVideoSyncManual();
 
@@ -40,6 +44,27 @@ const Home: React.FC = () => {
   const [isPlayerReady, setIsPlayerReady] = useState(false);
 
   const plyrRef = useRef<PlyrRef>(null);
+
+  // Log broadcast state changes
+  useEffect(() => {
+    if (DEBUG_MODE && broadcastState) {
+      console.log("[HOME:STATE] Broadcast state changed:", {
+        isPlaying: broadcastState.is_playing,
+        position: broadcastState.current_position.toFixed(2),
+        updatedAt: broadcastState.updated_at,
+      });
+    }
+  }, [broadcastState]);
+
+  // Log subscription status changes
+  useEffect(() => {
+    if (DEBUG_MODE) {
+      console.log(
+        "[HOME:SUBSCRIPTION] Status:",
+        isSubscribed ? "✅ Connected" : "⚠️ Connecting/Disconnected",
+      );
+    }
+  }, [isSubscribed]);
 
   // Derive lastKnownState from broadcastState
   const lastKnownState = useMemo(() => {
@@ -93,6 +118,8 @@ const Home: React.FC = () => {
 
       if (plyrRef.current?.plyr) {
         setIsPlayerReady(true);
+        if (DEBUG_MODE)
+          console.log("[HOME:PLAYER] Video player ready");
       } else {
         timeoutId = setTimeout(checkReady, 100);
       }
@@ -108,7 +135,12 @@ const Home: React.FC = () => {
 
   // Initial sync to broadcast state
   useEffect(() => {
-    if (!isPlayerReady || !broadcastState || !plyrRef.current?.plyr)
+    if (
+      !isPlayerReady ||
+      !broadcastState ||
+      !plyrRef.current?.plyr ||
+      isLocallyPaused
+    )
       return;
 
     syncToPosition(plyrRef.current.plyr, {
@@ -116,7 +148,12 @@ const Home: React.FC = () => {
       timestamp: new Date(broadcastState.updated_at).getTime(),
       isPlaying: broadcastState.is_playing,
     });
-  }, [isPlayerReady, broadcastState, syncToPosition]);
+  }, [
+    isPlayerReady,
+    broadcastState,
+    syncToPosition,
+    isLocallyPaused,
+  ]);
 
   // Client-side interpolation sync
   useEffect(() => {
@@ -145,11 +182,20 @@ const Home: React.FC = () => {
 
       // Only sync if drift exceeds tolerance
       if (timeDiff > 0.5 && !player.seeking) {
+        if (DEBUG_MODE) {
+          console.log("[HOME:DRIFT] Correcting drift:", {
+            currentTime: currentTime.toFixed(2),
+            expectedPosition: expectedPosition.toFixed(2),
+            drift: timeDiff.toFixed(2),
+          });
+        }
         player.currentTime = expectedPosition;
       }
 
       // Sync play/pause state
       if (lastKnownState.isPlaying && player.paused) {
+        if (DEBUG_MODE)
+          console.log("[HOME:SYNC] Auto-playing to match broadcast");
         const playPromise = player.play();
         if (playPromise instanceof Promise) {
           playPromise.catch((error) => {
@@ -158,6 +204,8 @@ const Home: React.FC = () => {
           });
         }
       } else if (!lastKnownState.isPlaying && !player.paused) {
+        if (DEBUG_MODE)
+          console.log("[HOME:SYNC] Auto-pausing to match broadcast");
         player.pause();
       }
     }, 100);
