@@ -1,18 +1,5 @@
 import React from "react";
 import { motion } from "framer-motion";
-import type { SkeletonProps } from "../config/types";
-
-export const Skeleton: React.FC<SkeletonProps> = ({
-  className = "",
-}) => {
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className={`bg-neutral-800 rounded animate-pulse ${className}`}
-    />
-  );
-};
 
 export const VideoPlayerSkeleton: React.FC = () => {
   return (
@@ -31,5 +18,3 @@ export const VideoPlayerSkeleton: React.FC = () => {
     </div>
   );
 };
-
-export default Skeleton;

@@ -16,14 +16,6 @@ export interface User {
 }
 
 /**
- * Minimal user type with just role (used in ProtectedRoute fallback)
- */
-
-export interface BasicUser {
-  role: UserRole;
-}
-
-/**
  * Question type from the questions table
  */
 
@@ -49,29 +41,6 @@ export interface Answer {
   is_correct: boolean;
   score: number;
   created_at: string;
-}
-
-/**
- * Quiz session type from the quiz_sessions table
- */
-
-export interface QuizSession {
-  id: number;
-  user_id: string;
-  started_at: string;
-  completed_at: string | null;
-  total_score: number;
-  questions_count: number;
-}
-
-/**
- * Quiz session question junction table
- */
-
-export interface QuizSessionQuestion {
-  id: number;
-  session_id: number;
-  question_id: number;
 }
 
 /**
@@ -116,15 +85,6 @@ export interface LeaderboardUser {
   isCurrentUser?: boolean;
 }
 
-// COMPONENT PROP TYPES
-
-/**
- * Props for Skeleton component
- */
-export interface SkeletonProps {
-  className?: string;
-}
-
 /**
  * Props for ProtectedRoute component
  */
@@ -132,3 +92,36 @@ export interface ProtectedRouteProps {
   children: React.ReactNode;
   requireAdmin?: boolean;
 }
+
+// AUTHENTICATION TYPES
+
+/**
+ * Authentication context state
+ */
+export interface AuthState {
+  user: User | null;
+  userId: string | null;
+  isAuthenticated: boolean;
+  isAdmin: boolean;
+  loading: boolean;
+  checkingAuth: boolean;
+  hasValidCachedUser: boolean;
+}
+
+/**
+ * Authentication context actions
+ */
+export interface AuthActions {
+  signInAnonymously: (userName: string) => Promise<void>;
+  signInWithPassword: (
+    email: string,
+    password: string,
+  ) => Promise<void>;
+  signOut: () => Promise<void>;
+  refreshUser: () => Promise<void>;
+}
+
+/**
+ * Combined authentication context
+ */
+export type AuthContextType = AuthState & AuthActions;

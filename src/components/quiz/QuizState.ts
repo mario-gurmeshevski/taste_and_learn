@@ -27,6 +27,7 @@ export type QuizAction =
   | { type: "SET_SELECTED_OPTION"; payload: number | null }
   | { type: "SET_ANSWERS"; payload: AnswerRecord[] }
   | { type: "ADD_ANSWER"; payload: AnswerRecord }
+  | { type: "UPDATE_ANSWER"; payload: AnswerRecord }
   | { type: "SET_QUIZ_COMPLETED"; payload: boolean }
   | { type: "SET_HAS_SUBMITTED"; payload: boolean }
   | { type: "SET_SHOW_CORRECT_ANSWER"; payload: boolean }
@@ -61,6 +62,20 @@ export function quizReducer(state: QuizState, action: QuizAction): QuizState {
       return { ...state, answers: action.payload };
     case "ADD_ANSWER": {
       const newAnswers = [...state.answers, action.payload];
+      const newLastAnsweredIds = new Set(state.lastAnsweredIds);
+      newLastAnsweredIds.add(action.payload.question_id);
+      return {
+        ...state,
+        answers: newAnswers,
+        lastAnsweredIds: newLastAnsweredIds,
+      };
+    }
+    case "UPDATE_ANSWER": {
+      const newAnswers = state.answers.map((answer) =>
+        answer.question_id === action.payload.question_id
+          ? action.payload
+          : answer,
+      );
       const newLastAnsweredIds = new Set(state.lastAnsweredIds);
       newLastAnsweredIds.add(action.payload.question_id);
       return {

@@ -10,7 +10,6 @@ interface QuizAnswerButtonProps {
   isSelected: boolean;
   isCorrect: boolean;
   showResult: boolean;
-  hasSubmitted: boolean;
   onClick: () => void;
 }
 
@@ -20,7 +19,6 @@ const QuizAnswerButton: React.FC<QuizAnswerButtonProps> = ({
   isSelected,
   isCorrect,
   showResult,
-  hasSubmitted,
   onClick,
 }) => {
   const { buttonClass, letterBgClass, letterTextClass } =
@@ -30,16 +28,16 @@ const QuizAnswerButton: React.FC<QuizAnswerButtonProps> = ({
     <motion.button
       key={index}
       onClick={onClick}
-      whileHover={!hasSubmitted ? { scale: 1.02 } : {}}
-      whileTap={!hasSubmitted ? { scale: 0.98 } : {}}
-      disabled={hasSubmitted}
+      whileHover={showResult ? {} : { scale: 1.02 }}
+      whileTap={showResult ? {} : { scale: 0.98 }}
+      disabled={showResult}
       aria-label={`Answer option ${ANSWER_LABELS[index]}: ${option}`}
       aria-pressed={isSelected}
-      aria-disabled={hasSubmitted}
+      aria-disabled={showResult}
       className={`
         relative h-32 sm:h-40 md:h-44 rounded-2xl font-semibold
         transition-all duration-200
-        ${hasSubmitted ? "cursor-default" : "cursor-pointer"}
+        ${showResult ? "cursor-default" : "cursor-pointer"}
         ${buttonClass}
       `}
     >

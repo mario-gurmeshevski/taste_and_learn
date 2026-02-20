@@ -1,34 +1,16 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Navigate, useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { FaSpinner } from "react-icons/fa";
-import supabase from "../lib/supabase";
+import { useAuth } from "../hooks/useAuth";
 import { ROUTES } from "../config/constants";
 
 const NotFound: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const { isAuthenticated, checkingAuth } = useAuth();
 
-  useEffect(() => {
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        if (session) {
-          setIsAuthenticated(true);
-        } else {
-          setIsAuthenticated(false);
-        }
-        setLoading(false);
-      },
-    );
-
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
-  }, []);
-
-  if (loading) {
+  if (checkingAuth) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-neutral-50">
         <div className="text-center">
