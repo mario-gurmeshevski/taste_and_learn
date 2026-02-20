@@ -24,7 +24,7 @@ export const VIDEO_SYNC_INTERVAL = 1000; // 1 second
 export const ADMIN_SYNC_INTERVAL = 30000; // 30 seconds
 
 /** Time to wait before clearing the question overlay after answering */
-export const QUESTION_CLEAR_DELAY = 4000; // 4 seconds
+export const QUESTION_CLEAR_DELAY = 5000; // 5 seconds
 
 // VIDEO SYNCHRONIZATION
 
