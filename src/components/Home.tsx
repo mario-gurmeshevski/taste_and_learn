@@ -20,10 +20,7 @@ import { useAuth } from "../hooks/useAuth";
 import "plyr-react/plyr.css";
 import type { PlyrRef } from "../config/types";
 import { VideoPlayerSkeleton } from "./Skeleton";
-import {
-  DEBUG_MODE,
-  MS_TO_SECONDS,
-} from "../config/constants";
+import { DEBUG_MODE, MS_TO_SECONDS } from "../config/constants";
 
 const Plyr = lazy(() =>
   import("plyr-react").then((module) => ({ default: module.Plyr })),

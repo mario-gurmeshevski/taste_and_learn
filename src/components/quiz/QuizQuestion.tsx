@@ -41,7 +41,8 @@ const QuizQuestion: React.FC<QuizQuestionProps> = ({
         >
           {currentQuestion.options.map((option, index) => {
             const isSelected = selectedOption === index;
-            const isCorrect = index === currentQuestion.correct_answer_index;
+            const isCorrect =
+              index === currentQuestion.correct_answer_index;
 
             return (
               <QuizAnswerButton

@@ -34,7 +34,10 @@ export type QuizAction =
   | { type: "SET_CURRENT_QUESTION"; payload: Question | null }
   | { type: "SET_VIDEO_POSITION"; payload: number }
   | { type: "SET_TIME_REMAINING"; payload: number }
-  | { type: "SET_LAST_KNOWN_STATE"; payload: QuizState["lastKnownState"] }
+  | {
+      type: "SET_LAST_KNOWN_STATE";
+      payload: QuizState["lastKnownState"];
+    }
   | { type: "SET_INITIAL_SYNC_DONE"; payload: boolean }
   | { type: "SET_PREVIOUS_POSITION"; payload: number }
   | { type: "RESET_QUIZ_STATE" };
@@ -54,7 +57,10 @@ export const initialQuizState: QuizState = {
   previousPosition: 0,
 };
 
-export function quizReducer(state: QuizState, action: QuizAction): QuizState {
+export function quizReducer(
+  state: QuizState,
+  action: QuizAction,
+): QuizState {
   switch (action.type) {
     case "SET_SELECTED_OPTION":
       return { ...state, selectedOption: action.payload };
@@ -132,32 +138,37 @@ export function getAnswerButtonStyles(
   if (showResult) {
     if (isCorrect) {
       return {
-        buttonClass: "bg-green-50 shadow-xl border-2 border-green-500",
+        buttonClass:
+          "bg-green-50 shadow-xl border-2 border-green-500",
         letterBgClass: "bg-green-500",
         letterTextClass: "text-white",
       };
     } else if (isSelected) {
       return {
-        buttonClass: "bg-red-50 shadow-xl border-2 border-red-500 opacity-60",
+        buttonClass:
+          "bg-red-50 shadow-xl border-2 border-red-500 opacity-60",
         letterBgClass: "bg-red-500",
         letterTextClass: "text-white",
       };
     } else {
       return {
-        buttonClass: "bg-white shadow-md border-2 border-gray-200 opacity-40",
+        buttonClass:
+          "bg-white shadow-md border-2 border-gray-200 opacity-40",
         letterBgClass: "bg-gray-200",
         letterTextClass: "text-gray-500",
       };
     }
   } else if (isSelected) {
     return {
-      buttonClass: "bg-white shadow-2xl scale-105 border-2 border-gray-900",
+      buttonClass:
+        "bg-white shadow-2xl scale-105 border-2 border-gray-900",
       letterBgClass: "bg-gray-900",
       letterTextClass: "text-white",
     };
   } else {
     return {
-      buttonClass: "bg-white shadow-md hover:shadow-xl border-2 border-gray-200 hover:border-gray-300",
+      buttonClass:
+        "bg-white shadow-md hover:shadow-xl border-2 border-gray-200 hover:border-gray-300",
       letterBgClass: "bg-gray-100",
       letterTextClass: "text-gray-700",
     };

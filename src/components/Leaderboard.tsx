@@ -82,7 +82,7 @@ const Leaderboard: React.FC = () => {
             session.completed_at &&
             (!userStatsMap[session.user_id].lastAttempt ||
               session.completed_at >
-              userStatsMap[session.user_id].lastAttempt!)
+                userStatsMap[session.user_id].lastAttempt!)
           ) {
             userStatsMap[session.user_id].lastAttempt =
               session.completed_at;

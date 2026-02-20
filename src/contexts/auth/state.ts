@@ -60,7 +60,9 @@ export async function fetchUserData(
 
       if (!data && !error) {
         if (DEBUG_MODE) {
-          console.log("[AUTH:FETCH] User not found (no data returned)");
+          console.log(
+            "[AUTH:FETCH] User not found (no data returned)",
+          );
         }
         return null;
       }
@@ -112,7 +114,9 @@ export async function fetchUserData(
   }
 
   if (DEBUG_MODE) {
-    console.error("[AUTH:FETCH] Failed to fetch user data after all retries");
+    console.error(
+      "[AUTH:FETCH] Failed to fetch user data after all retries",
+    );
   }
   return null;
 }
@@ -194,7 +198,9 @@ export async function updateAuthState(
         }
       } else {
         if (DEBUG_MODE) {
-          console.log("[AUTH:UPDATE] Account not found during sign in");
+          console.log(
+            "[AUTH:UPDATE] Account not found during sign in",
+          );
         }
         toast.error(
           "Account not found. Please try logging in again.",
@@ -267,7 +273,10 @@ export async function updateAuthState(
         setCheckingAuth(false);
 
         supabase.auth.signOut().catch((signOutError) => {
-          console.error("[AUTH:SIGNOUT] Failed to sign out:", signOutError);
+          console.error(
+            "[AUTH:SIGNOUT] Failed to sign out:",
+            signOutError,
+          );
         });
 
         setTimeout(() => {

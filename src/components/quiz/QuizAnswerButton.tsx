@@ -59,12 +59,18 @@ const QuizAnswerButton: React.FC<QuizAnswerButtonProps> = ({
       </div>
 
       {showResult && isCorrect && (
-        <div className="absolute top-4 right-4 text-green-500" aria-label="Correct answer">
+        <div
+          className="absolute top-4 right-4 text-green-500"
+          aria-label="Correct answer"
+        >
           <FaCheck className="w-8 h-8" aria-hidden="true" />
         </div>
       )}
       {showResult && isSelected && !isCorrect && (
-        <div className="absolute top-4 right-4 text-red-500" aria-label="Incorrect answer">
+        <div
+          className="absolute top-4 right-4 text-red-500"
+          aria-label="Incorrect answer"
+        >
           <FaTimes className="w-8 h-8" aria-hidden="true" />
         </div>
       )}

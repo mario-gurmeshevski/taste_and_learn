@@ -9,12 +9,13 @@ import React, {
 import toast from "react-hot-toast";
 import supabase from "../../lib/supabase";
 import type { User } from "../../config/types";
-import {
-  AUTH_TIMEOUT,
-  DEBUG_MODE,
-} from "../../config/constants";
+import { AUTH_TIMEOUT, DEBUG_MODE } from "../../config/constants";
 import type { AuthContextType } from "../../config/types";
-import { clearAuthTimeout, fetchUserData, updateAuthState } from "./state";
+import {
+  clearAuthTimeout,
+  fetchUserData,
+  updateAuthState,
+} from "./state";
 import {
   signInAnonymously,
   signInWithPassword,
@@ -54,7 +55,13 @@ export const AuthProvider: React.FC<{
   );
 
   const handleUpdateAuthState = useCallback(
-    async (session: { user?: { id: string }; access_token?: string } | null, event: string) => {
+    async (
+      session: {
+        user?: { id: string };
+        access_token?: string;
+      } | null,
+      event: string,
+    ) => {
       await updateAuthState(
         session,
         event,
