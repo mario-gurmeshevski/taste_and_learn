@@ -14,18 +14,15 @@ import {
   FaBroadcastTower,
 } from "react-icons/fa";
 import toast from "react-hot-toast";
-import supabase from "../lib/supabase";
 import { useBroadcast } from "../hooks/useBroadcast";
 import { useVideoSyncManual } from "../hooks/useVideoSync";
+import { useAuth } from "../hooks/useAuth";
 import "plyr-react/plyr.css";
-import type { PlyrRef, User } from "../config/types";
+import type { PlyrRef } from "../config/types";
 import { VideoPlayerSkeleton } from "./Skeleton";
 import {
   DEBUG_MODE,
   MS_TO_SECONDS,
-  DB_TABLES,
-  USER_ROLES,
-  DB_FIELDS,
 } from "../config/constants";
 
 const Plyr = lazy(() =>
@@ -38,8 +35,8 @@ const Home: React.FC = () => {
 
   const { broadcastState, isSubscribed } = useBroadcast();
   const { syncToPosition } = useVideoSyncManual();
+  const { isAdmin } = useAuth();
 
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLocallyPaused, setIsLocallyPaused] = useState(false);
   const [isPlayerReady, setIsPlayerReady] = useState(false);
 
@@ -77,36 +74,6 @@ const Home: React.FC = () => {
       isPlaying: broadcastState.is_playing,
     };
   }, [broadcastState]);
-
-  // Check authentication and load user profile
-  useEffect(() => {
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        // Update realtime auth when session changes
-        if (session?.access_token) {
-          supabase.realtime.setAuth(session.access_token);
-        }
-
-        if (session?.user) {
-          const { data: userData } = await supabase
-            .from(DB_TABLES.USERS)
-            .select("*")
-            .eq(DB_FIELDS.ID, session.user.id)
-            .maybeSingle();
-
-          if (userData) {
-            setCurrentUser(userData);
-          }
-        } else {
-          setCurrentUser(null);
-        }
-      },
-    );
-
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
-  }, []);
 
   // Check if player is ready
   useEffect(() => {
@@ -234,7 +201,7 @@ const Home: React.FC = () => {
     }
   };
 
-  if (currentUser?.role === USER_ROLES.ADMIN) {
+  if (isAdmin) {
     return (
       <div className="pt-16 bg-black min-h-screen flex items-center justify-center">
         <motion.div

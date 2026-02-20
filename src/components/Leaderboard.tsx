@@ -6,68 +6,33 @@ import {
 } from "framer-motion";
 import { FaLock, FaSpinner } from "react-icons/fa";
 import supabase from "../lib/supabase";
+import { useAuth } from "../hooks/useAuth";
 import { sanitizeText } from "../lib/sanitize";
 import type { LeaderboardUser } from "../config/types";
 import {
   DB_TABLES,
-  USER_ROLES,
   DB_FIELDS,
   SORT_ORDER,
 } from "../config/constants";
 
 const Leaderboard: React.FC = () => {
   const [topUsers, setTopUsers] = useState<LeaderboardUser[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showAllContestants, setShowAllContestants] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { userId, checkingAuth } = useAuth();
 
+  // Fetch leaderboard when userId is available
   useEffect(() => {
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        if (!session?.user) {
-          setError("Please log in to view the leaderboard");
-          setLoading(false);
-          return;
-        }
+    if (!userId) {
+      return;
+    }
 
-        try {
-          const { data: userData, error: userError } = await supabase
-            .from(DB_TABLES.USERS)
-            .select("*")
-            .eq(DB_FIELDS.ID, session.user.id)
-            .maybeSingle();
-
-          if (userError) throw userError;
-
-          if (!userData) {
-            setError("User not found");
-            setLoading(false);
-            return;
-          }
-
-          if (userData.role !== USER_ROLES.ADMIN) {
-            setError("Access denied. Admin privileges required.");
-            setIsAdmin(false);
-            setLoading(false);
-            return;
-          }
-
-          setIsAdmin(true);
-          await fetchLeaderboard(userData.id);
-        } catch {
-          setError("Failed to load leaderboard");
-          setLoading(false);
-        }
-      },
-    );
-
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
-  }, []);
+    fetchLeaderboard(userId);
+  }, [userId]);
 
   const fetchLeaderboard = async (currentUserId: string) => {
+    setError(null);
+
     try {
       const { data: usersData, error: usersError } = await supabase
         .from("users")
@@ -117,7 +82,7 @@ const Leaderboard: React.FC = () => {
             session.completed_at &&
             (!userStatsMap[session.user_id].lastAttempt ||
               session.completed_at >
-                userStatsMap[session.user_id].lastAttempt!)
+              userStatsMap[session.user_id].lastAttempt!)
           ) {
             userStatsMap[session.user_id].lastAttempt =
               session.completed_at;
@@ -147,12 +112,10 @@ const Leaderboard: React.FC = () => {
       setTopUsers(sortedUsers.slice(0, 10));
     } catch {
       setError("Failed to fetch leaderboard data");
-    } finally {
-      setLoading(false);
     }
   };
 
-  if (loading) {
+  if (checkingAuth) {
     return (
       <div className="flex justify-center items-center h-64">
         <FaSpinner className="w-8 h-8 animate-spin text-neutral-900" />
@@ -160,7 +123,7 @@ const Leaderboard: React.FC = () => {
     );
   }
 
-  if (error || !isAdmin) {
+  if (error) {
     return (
       <motion.div
         initial={{ opacity: 0, y: 20 }}

@@ -15,7 +15,7 @@ import AdminPanel from "./components/AdminPanel";
 import ProtectedRoute from "./components/ProtectedRoute";
 import NotFound from "./components/NotFound";
 import ErrorBoundary from "./components/ErrorBoundary";
-import { AuthProvider } from "./contexts/AuthContext";
+import { AuthProvider } from "./contexts/auth/AuthProvider";
 import { BroadcastProvider } from "./contexts/BroadcastContext";
 
 function App() {

@@ -9,15 +9,14 @@ import { motion } from "framer-motion";
 import toast from "react-hot-toast";
 import supabase from "../lib/supabase";
 import { useAbortController } from "../hooks/useAbortController";
+import { useAuth } from "../hooks/useAuth";
 import "plyr-react/plyr.css";
-import type { BroadcastState, PlyrRef, User } from "../config/types";
+import type { BroadcastState, PlyrRef } from "../config/types";
 import {
   DEBUG_MODE,
   ADMIN_SYNC_INTERVAL,
   BROADCAST_CHANNEL_NAME,
   DB_TABLES,
-  USER_ROLES,
-  DB_FIELDS,
 } from "../config/constants";
 import VideoControls from "./admin/VideoControls";
 import BroadcastStatus from "./admin/BroadcastStatus";
@@ -28,11 +27,10 @@ const AdminPanel: React.FC = () => {
   if (DEBUG_MODE) console.log("[ADMIN:COMPONENT] AdminPanel mounted");
 
   const { safeTimeout } = useAbortController();
+  const { user } = useAuth();
   const [broadcastState, setBroadcastState] =
     useState<BroadcastState | null>(null);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isPlayerReady, setIsPlayerReady] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [showQRModal, setShowQRModal] = useState(false);
 
   const plyrRef = useRef<PlyrRef>(null);
@@ -73,41 +71,11 @@ const AdminPanel: React.FC = () => {
     broadcastStateRef.current = broadcastState;
   }, [broadcastState]);
 
-  // Check authentication
-  useEffect(() => {
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        if (!session) {
-          window.location.href = "/login";
-          return;
-        }
-
-        const { data: userData } = await supabase
-          .from(DB_TABLES.USERS)
-          .select("*")
-          .eq(DB_FIELDS.ID, session.user.id)
-          .maybeSingle();
-
-        if (!userData || userData.role !== USER_ROLES.ADMIN) {
-          window.location.href = "/";
-          return;
-        }
-
-        setCurrentUser(userData);
-        setLoading(false);
-      },
-    );
-
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
-  }, []);
-
   const updateBroadcastState = useCallback(
     async (updates: Partial<BroadcastState>) => {
       if (
         !broadcastStateRef.current ||
-        !currentUser ||
+        !user ||
         isUpdating.current
       )
         return;
@@ -124,7 +92,7 @@ const AdminPanel: React.FC = () => {
       try {
         const updateData = {
           ...updates,
-          updated_by: currentUser.id,
+          updated_by: user.id,
           updated_at: new Date().toISOString(),
         };
 
@@ -180,7 +148,7 @@ const AdminPanel: React.FC = () => {
         isUpdating.current = false;
       }
     },
-    [currentUser],
+    [user],
   );
 
   useEffect(() => {
@@ -223,7 +191,7 @@ const AdminPanel: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!isPlayerReady || !currentUser) return;
+    if (!isPlayerReady || !user) return;
 
     const fetchBroadcastState = async () => {
       const { data } = await supabase
@@ -314,7 +282,7 @@ const AdminPanel: React.FC = () => {
       }
       broadcastChannelRef.current = null;
     };
-  }, [isPlayerReady, currentUser, safeTimeout]);
+  }, [isPlayerReady, user, safeTimeout]);
 
   const handlePlay = async () => {
     if (!isPlayerReady || !plyrRef.current?.plyr) return;
@@ -419,18 +387,6 @@ const AdminPanel: React.FC = () => {
       toast.error("Failed to skip backward");
     }
   };
-
-  if (loading) {
-    return (
-      <div className="pt-16 bg-black min-h-screen flex items-center justify-center">
-        <div className="text-white">Loading...</div>
-      </div>
-    );
-  }
-
-  if (!currentUser || currentUser.role !== USER_ROLES.ADMIN) {
-    return null;
-  }
 
   return (
     <div className="pt-16 bg-black min-h-screen overflow-hidden">

@@ -25,6 +25,7 @@ import {
   ROUTES,
   DB_FIELDS,
   SORT_ORDER,
+  AUTH_TIMEOUT,
 } from "../config/constants";
 import { initialQuizState, quizReducer } from "./quiz/QuizState";
 import QuizLoading from "./quiz/QuizLoading";
@@ -48,12 +49,16 @@ const Quiz: React.FC = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const lastKnownStateRef = useRef<{
     position: number;
     timestamp: number;
     isPlaying: boolean;
   } | null>(null);
+
+  const currentQuestionRef = useRef<Question | null>(null);
+  const videoPositionRef = useRef<number>(0);
 
   const handleAutoSubmit = useCallback((question: Question) => {
     const newAnswer: AnswerRecord = {
@@ -87,6 +92,16 @@ const Quiz: React.FC = () => {
     setUserDiscriminator(sanitizeText(user.discriminator));
 
     const loadQuizData = async () => {
+      setLoading(true);
+      
+      loadingTimeoutRef.current = setTimeout(() => {
+        setError("Loading quiz data is taking longer than expected. Please refresh the page.");
+        toast.error("Loading timeout. Please try refreshing the page.", {
+          icon: "⏱️",
+          duration: 5000,
+        });
+      }, AUTH_TIMEOUT);
+
       try {
         const { data: questionsData, error: questionsError } =
           await supabase
@@ -150,6 +165,10 @@ const Quiz: React.FC = () => {
           duration: 5000,
         });
       } finally {
+        if (loadingTimeoutRef.current) {
+          clearTimeout(loadingTimeoutRef.current);
+          loadingTimeoutRef.current = null;
+        }
         setLoading(false);
       }
     };
@@ -220,6 +239,8 @@ const Quiz: React.FC = () => {
         payload: Math.max(0, expectedPosition),
       });
 
+      videoPositionRef.current = Math.max(0, expectedPosition);
+
       animationFrameRef.current =
         requestAnimationFrame(updateLocalTime);
     };
@@ -275,12 +296,13 @@ const Quiz: React.FC = () => {
     );
 
     if (activeQuestion) {
-      if (state.currentQuestion?.id !== activeQuestion.id) {
-        if (!state.lastAnsweredIds.has(activeQuestion.id)) {
-          dispatch({
-            type: "SET_CURRENT_QUESTION",
-            payload: activeQuestion,
-          });
+        if (state.currentQuestion?.id !== activeQuestion.id) {
+          if (!state.lastAnsweredIds.has(activeQuestion.id)) {
+            dispatch({
+              type: "SET_CURRENT_QUESTION",
+              payload: activeQuestion,
+            });
+            currentQuestionRef.current = activeQuestion;
           dispatch({ type: "SET_SELECTED_OPTION", payload: null });
           dispatch({ type: "SET_HAS_SUBMITTED", payload: false });
           dispatch({
@@ -296,7 +318,7 @@ const Quiz: React.FC = () => {
       ) {
         if (!state.lastAnsweredIds.has(state.currentQuestion.id)) {
           handleAutoSubmit(state.currentQuestion);
-        } else if (state.hasSubmitted && !state.showCorrectAnswer) {
+        } else {
           dispatch({
             type: "SET_SHOW_CORRECT_ANSWER",
             payload: true,
@@ -309,6 +331,7 @@ const Quiz: React.FC = () => {
       }
       if (!state.showCorrectAnswer) {
         dispatch({ type: "SET_CURRENT_QUESTION", payload: null });
+        currentQuestionRef.current = null;
       }
     }
   }, [
@@ -324,6 +347,15 @@ const Quiz: React.FC = () => {
     handleAutoSubmit,
     safeTimeout,
   ]);
+
+  useEffect(() => {
+    return () => {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   const saveQuizResults = useCallback(
     async (allAnswers: AnswerRecord[]) => {
@@ -392,55 +424,59 @@ const Quiz: React.FC = () => {
       return;
     }
 
+    const initialRemaining = Math.max(
+      0,
+      state.currentQuestion.end_timestamp - state.videoPosition,
+    );
+    dispatch({ type: "SET_TIME_REMAINING", payload: initialRemaining });
+
     const cleanupInterval = safeInterval(() => {
-      if (!state.currentQuestion) return;
+      if (!currentQuestionRef.current) return;
 
       const remaining = Math.max(
         0,
-        state.currentQuestion.end_timestamp - state.videoPosition,
+        currentQuestionRef.current.end_timestamp - videoPositionRef.current,
       );
 
       dispatch({ type: "SET_TIME_REMAINING", payload: remaining });
     }, 1000);
 
     return cleanupInterval;
-  }, [
-    state.currentQuestion,
-    state.videoPosition,
-    state.lastKnownState,
-    safeInterval,
-  ]);
+  }, [state.currentQuestion, safeInterval]);
 
   const handleOptionSelect = useCallback((optionIndex: number) => {
-    dispatch({
-      type: "SET_SELECTED_OPTION",
-      payload: optionIndex,
-    });
-  }, []);
-
-  const handleSubmitAnswer = useCallback(() => {
-    if (!state.currentQuestion || state.selectedOption === null)
-      return;
+    if (!state.currentQuestion) return;
 
     const newAnswer: AnswerRecord = {
       question_id: state.currentQuestion.id,
-      selected_option: state.selectedOption,
+      selected_option: optionIndex,
       is_correct:
-        state.selectedOption ===
-        state.currentQuestion.correct_answer_index,
+        optionIndex === state.currentQuestion.correct_answer_index,
       score:
-        state.selectedOption ===
-        state.currentQuestion.correct_answer_index
+        optionIndex === state.currentQuestion.correct_answer_index
           ? 1
           : 0,
     };
 
     dispatch({
-      type: "ADD_ANSWER",
-      payload: newAnswer,
+      type: "SET_SELECTED_OPTION",
+      payload: optionIndex,
     });
+
+    if (state.lastAnsweredIds.has(state.currentQuestion.id)) {
+      dispatch({
+        type: "UPDATE_ANSWER",
+        payload: newAnswer,
+      });
+    } else {
+      dispatch({
+        type: "ADD_ANSWER",
+        payload: newAnswer,
+      });
+    }
+
     dispatch({ type: "SET_HAS_SUBMITTED", payload: true });
-  }, [state.currentQuestion, state.selectedOption]);
+  }, [state.currentQuestion, state.lastAnsweredIds]);
 
   const nextQuestion = useMemo(() => {
     return questions.find(
@@ -494,11 +530,9 @@ const Quiz: React.FC = () => {
             <QuizQuestion
               currentQuestion={state.currentQuestion}
               selectedOption={state.selectedOption}
-              hasSubmitted={state.hasSubmitted}
               showCorrectAnswer={state.showCorrectAnswer}
               timeRemaining={state.timeRemaining}
               onOptionSelect={handleOptionSelect}
-              onSubmitAnswer={handleSubmitAnswer}
             />
           )}
         </AnimatePresence>
