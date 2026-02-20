@@ -103,13 +103,9 @@ export async function signInWithPassword(
       });
 
     if (authError) {
-      if (
-        authError.message.includes("Invalid login credentials")
-      ) {
+      if (authError.message.includes("Invalid login credentials")) {
         throw new Error("Invalid email or password.");
-      } else if (
-        authError.message.includes("Email not confirmed")
-      ) {
+      } else if (authError.message.includes("Email not confirmed")) {
         throw new Error(
           "Please confirm your email address before logging in.",
         );
@@ -137,9 +133,7 @@ export async function signInWithPassword(
     }
 
     if (!userData) {
-      const discriminator = generateDiscriminator(
-        authData.user.id,
-      );
+      const discriminator = generateDiscriminator(authData.user.id);
       const sanitizedName = sanitizeText(email.split("@")[0]);
 
       const { error: insertError } = await supabase

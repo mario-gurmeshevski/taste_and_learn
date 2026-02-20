@@ -49,7 +49,9 @@ const Quiz: React.FC = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadingTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
 
   const lastKnownStateRef = useRef<{
     position: number;
@@ -93,13 +95,18 @@ const Quiz: React.FC = () => {
 
     const loadQuizData = async () => {
       setLoading(true);
-      
+
       loadingTimeoutRef.current = setTimeout(() => {
-        setError("Loading quiz data is taking longer than expected. Please refresh the page.");
-        toast.error("Loading timeout. Please try refreshing the page.", {
-          icon: "⏱️",
-          duration: 5000,
-        });
+        setError(
+          "Loading quiz data is taking longer than expected. Please refresh the page.",
+        );
+        toast.error(
+          "Loading timeout. Please try refreshing the page.",
+          {
+            icon: "⏱️",
+            duration: 5000,
+          },
+        );
       }, AUTH_TIMEOUT);
 
       try {
@@ -296,13 +303,13 @@ const Quiz: React.FC = () => {
     );
 
     if (activeQuestion) {
-        if (state.currentQuestion?.id !== activeQuestion.id) {
-          if (!state.lastAnsweredIds.has(activeQuestion.id)) {
-            dispatch({
-              type: "SET_CURRENT_QUESTION",
-              payload: activeQuestion,
-            });
-            currentQuestionRef.current = activeQuestion;
+      if (state.currentQuestion?.id !== activeQuestion.id) {
+        if (!state.lastAnsweredIds.has(activeQuestion.id)) {
+          dispatch({
+            type: "SET_CURRENT_QUESTION",
+            payload: activeQuestion,
+          });
+          currentQuestionRef.current = activeQuestion;
           dispatch({ type: "SET_SELECTED_OPTION", payload: null });
           dispatch({ type: "SET_HAS_SUBMITTED", payload: false });
           dispatch({
@@ -428,14 +435,18 @@ const Quiz: React.FC = () => {
       0,
       state.currentQuestion.end_timestamp - state.videoPosition,
     );
-    dispatch({ type: "SET_TIME_REMAINING", payload: initialRemaining });
+    dispatch({
+      type: "SET_TIME_REMAINING",
+      payload: initialRemaining,
+    });
 
     const cleanupInterval = safeInterval(() => {
       if (!currentQuestionRef.current) return;
 
       const remaining = Math.max(
         0,
-        currentQuestionRef.current.end_timestamp - videoPositionRef.current,
+        currentQuestionRef.current.end_timestamp -
+          videoPositionRef.current,
       );
 
       dispatch({ type: "SET_TIME_REMAINING", payload: remaining });
@@ -444,39 +455,42 @@ const Quiz: React.FC = () => {
     return cleanupInterval;
   }, [state.currentQuestion, safeInterval]);
 
-  const handleOptionSelect = useCallback((optionIndex: number) => {
-    if (!state.currentQuestion) return;
+  const handleOptionSelect = useCallback(
+    (optionIndex: number) => {
+      if (!state.currentQuestion) return;
 
-    const newAnswer: AnswerRecord = {
-      question_id: state.currentQuestion.id,
-      selected_option: optionIndex,
-      is_correct:
-        optionIndex === state.currentQuestion.correct_answer_index,
-      score:
-        optionIndex === state.currentQuestion.correct_answer_index
-          ? 1
-          : 0,
-    };
+      const newAnswer: AnswerRecord = {
+        question_id: state.currentQuestion.id,
+        selected_option: optionIndex,
+        is_correct:
+          optionIndex === state.currentQuestion.correct_answer_index,
+        score:
+          optionIndex === state.currentQuestion.correct_answer_index
+            ? 1
+            : 0,
+      };
 
-    dispatch({
-      type: "SET_SELECTED_OPTION",
-      payload: optionIndex,
-    });
-
-    if (state.lastAnsweredIds.has(state.currentQuestion.id)) {
       dispatch({
-        type: "UPDATE_ANSWER",
-        payload: newAnswer,
+        type: "SET_SELECTED_OPTION",
+        payload: optionIndex,
       });
-    } else {
-      dispatch({
-        type: "ADD_ANSWER",
-        payload: newAnswer,
-      });
-    }
 
-    dispatch({ type: "SET_HAS_SUBMITTED", payload: true });
-  }, [state.currentQuestion, state.lastAnsweredIds]);
+      if (state.lastAnsweredIds.has(state.currentQuestion.id)) {
+        dispatch({
+          type: "UPDATE_ANSWER",
+          payload: newAnswer,
+        });
+      } else {
+        dispatch({
+          type: "ADD_ANSWER",
+          payload: newAnswer,
+        });
+      }
+
+      dispatch({ type: "SET_HAS_SUBMITTED", payload: true });
+    },
+    [state.currentQuestion, state.lastAnsweredIds],
+  );
 
   const nextQuestion = useMemo(() => {
     return questions.find(

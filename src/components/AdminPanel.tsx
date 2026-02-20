@@ -73,11 +73,7 @@ const AdminPanel: React.FC = () => {
 
   const updateBroadcastState = useCallback(
     async (updates: Partial<BroadcastState>) => {
-      if (
-        !broadcastStateRef.current ||
-        !user ||
-        isUpdating.current
-      )
+      if (!broadcastStateRef.current || !user || isUpdating.current)
         return;
 
       if (DEBUG_MODE) {

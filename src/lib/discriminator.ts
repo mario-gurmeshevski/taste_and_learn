@@ -26,15 +26,3 @@ export function generateDiscriminator(userId: string): string {
 
   return (num % 10000).toString().padStart(4, "0");
 }
-
-/**
- * Generates a full display name with discriminator
- * Format: "UserName#1234"
- */
-export function generateDisplayName(
-  userName: string,
-  userId: string,
-): string {
-  const discriminator = generateDiscriminator(userId);
-  return `${userName}#${discriminator}`;
-}
