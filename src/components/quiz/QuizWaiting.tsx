@@ -25,7 +25,7 @@ const QuizWaiting: React.FC<QuizWaitingProps> = ({
     <div className="bg-white border border-neutral-200 p-6 text-center">
       <p className="text-neutral-600">
         Waiting for next question... ({answeredCount}/{questionsCount}
-        answered)
+         answered)
       </p>
       <p className="text-sm text-neutral-500 mt-2">
         Video position: {videoPosition.toFixed(1)}s
