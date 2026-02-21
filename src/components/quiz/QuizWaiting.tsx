@@ -23,8 +23,8 @@ const QuizWaiting: React.FC<QuizWaitingProps> = ({
 }) => {
   return (
     <div className="bg-white border border-neutral-200 p-6 text-center">
+      <p className="text-neutral-600">Waiting for next question...</p>
       <p className="text-neutral-600">
-        Waiting for next question... 
         ({answeredCount}/{questionsCount} answered)
       </p>
       <p className="text-sm text-neutral-500 mt-2">
@@ -54,7 +54,7 @@ const QuizWaiting: React.FC<QuizWaitingProps> = ({
             ) : (
               <>
                 <FaPause aria-hidden="true" /> Paused
-            </>
+              </>
             )}
           </span>
         </p>
