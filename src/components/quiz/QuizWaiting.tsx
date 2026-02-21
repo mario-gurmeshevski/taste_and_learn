@@ -24,8 +24,7 @@ const QuizWaiting: React.FC<QuizWaitingProps> = ({
   return (
     <div className="bg-white border border-neutral-200 p-6 text-center">
       <p className="text-neutral-600">
-        Waiting for next question... ({answeredCount}/{questionsCount}
-         answered)
+        Waiting for next question... ({answeredCount}/{questionsCount} answered)
       </p>
       <p className="text-sm text-neutral-500 mt-2">
         Video position: {videoPosition.toFixed(1)}s
@@ -45,7 +44,7 @@ const QuizWaiting: React.FC<QuizWaitingProps> = ({
       ) : null}
       {lastKnownState && (
         <p className="text-xs text-neutral-400 mt-1">
-          Broadcast:
+          Broadcast:{" "}
           <span className="inline-flex items-center gap-1">
             {lastKnownState.isPlaying ? (
               <>
@@ -54,7 +53,7 @@ const QuizWaiting: React.FC<QuizWaitingProps> = ({
             ) : (
               <>
                 <FaPause aria-hidden="true" /> Paused
-              </>
+            </>
             )}
           </span>
         </p>
