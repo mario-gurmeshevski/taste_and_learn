@@ -34,7 +34,7 @@ const Navbar: React.FC = () => {
   const handleLogout = async () => {
     try {
       await signOut();
-      navigate(ROUTES.LOGIN);
+      navigate(ROUTES.LOGIN, { replace: true });
     } catch (error) {
       console.error("Logout error:", error);
     }
@@ -230,9 +230,9 @@ const Navbar: React.FC = () => {
                       }}
                     >
                       <button
-                        onClick={() => {
-                          handleLogout();
+                        onClick={async () => {
                           setIsMobileMenuOpen(false);
+                          await handleLogout();
                         }}
                         aria-label="Log out of your account"
                         className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
