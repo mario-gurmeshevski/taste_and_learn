@@ -16,6 +16,7 @@ export async function signInAnonymously(
   setUserId: (userId: string | null) => void,
   setIsAuthenticated: (isAuthenticated: boolean) => void,
   setIsAdmin: (isAdmin: boolean) => void,
+  isInitialFetchCompleteRef: React.RefObject<boolean>,
 ) {
   if (!userName.trim()) {
     throw new Error("User name is required");
@@ -62,6 +63,8 @@ export async function signInAnonymously(
       role: USER_ROLES_CONST.USER,
       created_at: new Date().toISOString(),
     };
+
+    isInitialFetchCompleteRef.current = true;
 
     setUser(newUserData);
     setUserId(newUserId);
@@ -194,7 +197,7 @@ export async function signOut(
   setIsAuthenticated: (isAuthenticated: boolean) => void,
   setIsAdmin: (isAdmin: boolean) => void,
   setHasValidCachedUser: (hasValidCachedUser: boolean) => void,
-  isInitialFetchCompleteRef: React.MutableRefObject<boolean>,
+  isInitialFetchCompleteRef: React.RefObject<boolean>,
 ) {
   try {
     await supabase.auth.signOut();
@@ -220,7 +223,7 @@ export async function refreshUser(
   setUser: (user: User | null) => void,
   setIsAdmin: (isAdmin: boolean) => void,
   setHasValidCachedUser: (hasValidCachedUser: boolean) => void,
-  isInitialFetchCompleteRef: React.MutableRefObject<boolean>,
+  isInitialFetchCompleteRef: React.RefObject<boolean>,
 ) {
   if (!userId) return;
 

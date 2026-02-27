@@ -144,6 +144,7 @@ export const AuthProvider: React.FC<{
         setUserId,
         setIsAuthenticated,
         setIsAdmin,
+        isInitialFetchCompleteRef,
       );
     },
     [],

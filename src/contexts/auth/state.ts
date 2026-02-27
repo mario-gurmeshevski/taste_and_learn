@@ -10,7 +10,7 @@ import {
 } from "../../config/constants";
 
 export function clearAuthTimeout(
-  timeoutRef: React.MutableRefObject<number | null>,
+  timeoutRef: React.RefObject<number | null>,
 ) {
   if (timeoutRef.current !== null) {
     window.clearTimeout(timeoutRef.current);
@@ -128,8 +128,8 @@ export async function updateAuthState(
   } | null,
   event: string | undefined,
   fetchUserDataFn: (userId: string) => Promise<User | null>,
-  isUpdatingAuthRef: React.MutableRefObject<boolean>,
-  isInitialFetchCompleteRef: React.MutableRefObject<boolean>,
+  isUpdatingAuthRef: React.RefObject<boolean>,
+  isInitialFetchCompleteRef: React.RefObject<boolean>,
   setUser: (user: User | null) => void,
   setUserId: (userId: string | null) => void,
   setIsAuthenticated: (isAuthenticated: boolean) => void,
@@ -173,10 +173,10 @@ export async function updateAuthState(
     }
 
     if (event === "SIGNED_IN") {
-      if (DEBUG_MODE) {
-        console.log(
-          "[AUTH:UPDATE] SIGNED_IN - fetching user data for new session",
-        );
+      if (isInitialFetchCompleteRef.current) {
+        clearAuthTimeoutFn();
+        setCheckingAuth(false);
+        return;
       }
 
       const userData = await fetchUserDataFn(currentUserId);
@@ -190,26 +190,12 @@ export async function updateAuthState(
         setIsAdmin(userData.role === USER_ROLES.ADMIN);
         setHasValidCachedUser(true);
         isInitialFetchCompleteRef.current = true;
-
-        if (DEBUG_MODE) {
-          console.log(
-            "[AUTH:UPDATE] User data fetched and cached for new session",
-          );
-        }
       } else {
         if (DEBUG_MODE) {
           console.log(
-            "[AUTH:UPDATE] Account not found during sign in",
+            "[AUTH:UPDATE] SIGNED_IN - user row not yet in DB (likely anonymous sign-in race), skipping.",
           );
         }
-        toast.error(
-          "Account not found. Please try logging in again.",
-          { icon: "👋", duration: 5000 },
-        );
-        setUser(null);
-        setUserId(null);
-        setIsAuthenticated(false);
-        setIsAdmin(false);
       }
 
       clearAuthTimeoutFn();
