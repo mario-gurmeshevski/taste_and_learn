@@ -1,7 +1,7 @@
 // DEBUGGING
 
 /** Enable/disable console logging for debugging subscription and broadcast */
-export const DEBUG_MODE = true;
+export const DEBUG_MODE = false;
 
 // TIMING & POLLING INTERVALS (milliseconds)
 
