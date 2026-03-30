@@ -8,17 +8,27 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          // React core
-          "react-vendor": ["react", "react-dom", "react-router-dom"],
-          // Supabase
-          "supabase": ["@supabase/supabase-js"],
-          // UI/Animations
-          "ui-vendor": ["framer-motion", "react-hot-toast"],
-          // Icons
-          "icons": ["react-icons/fa", "react-icons", "qrcode.react"],
-          // Video player (loaded separately due to size)
-          "plyr": ["plyr-react"],
+        manualChunks: (id: string) => {
+          if (id.includes("node_modules/react/") ||
+              id.includes("node_modules/react-dom/") ||
+              id.includes("node_modules/react-router-dom/")) {
+            return "react-vendor";
+          }
+          if (id.includes("node_modules/@supabase/")) {
+            return "supabase";
+          }
+          if (id.includes("node_modules/framer-motion/") ||
+              id.includes("node_modules/react-hot-toast/")) {
+            return "ui-vendor";
+          }
+          if (id.includes("node_modules/react-icons/") ||
+              id.includes("node_modules/qrcode.react/")) {
+            return "icons";
+          }
+          if (id.includes("node_modules/plyr-react/") ||
+              id.includes("node_modules/plyr/")) {
+            return "plyr";
+          }
         },
       },
     },
